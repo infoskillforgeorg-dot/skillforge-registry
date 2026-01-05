@@ -41,7 +41,7 @@
         </div>
         <div>
           <h1 class="text-lg font-black tracking-tighter uppercase leading-none">SkillForge</h1>
-          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">Digital Sovereign Hub</span>
+          <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none">SkillForge Digital Smart Systems</span>
         </div>
       </div>
       <div class="text-right flex flex-col items-end">
@@ -73,7 +73,7 @@
                 <p class="text-slate-400 text-sm">Official Foundation Entry • Phase 1 Registration</p>
             </div>
 
-            <form id="registration-form" class="space-y-6">
+            <form id="registration-form" onsubmit="return handleFormSubmit(event)" class="space-y-6">
                 <div class="space-y-5">
                   <div>
                     <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Full Legal Name</label>
@@ -308,43 +308,54 @@
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
     // Step 1 Submission
-    const form = document.getElementById('registration-form');
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
+    window.handleFormSubmit = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
         
-        const isDuplicate = cloudRegistry.some(r => r.name === nameInput);
+        const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
+        const isTestMode = nameInput === "SKILLFORGE TEST";
+        
+        // Duplicate Check (Skip if Test Mode)
+        const isDuplicate = !isTestMode && cloudRegistry.some(r => r.name === nameInput);
         if (isDuplicate) {
-            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered. Duplicate entries are blocked.`;
+            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered. Access Restricted.`;
             document.getElementById('error-modal').classList.remove('hidden');
-            return;
+            return false;
         }
 
         const btn = document.getElementById('submit-btn');
         btn.disabled = true;
-        btn.innerHTML = 'Verifying Identity Node...';
+        btn.innerHTML = 'Securing Initial Node...';
 
         const trackSelected = document.getElementById('track').value;
         const tCode = trackCodes[trackSelected];
         const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
         
+        // SFID Generation (Special Demo ID for test mode)
+        const generatedSFID = isTestMode ? "SF26-TEST-999" : `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
+
         sessionState = {
             name: nameInput,
             track: trackSelected,
-            challenge: form.challenge.value,
+            challenge: document.querySelector('input[name="challenge"]:checked').value,
             phone: document.getElementById('phone').value,
             email: document.getElementById('email').value,
-            sfid: `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`,
-            timestamp: new Date().toISOString()
+            sfid: generatedSFID,
+            timestamp: new Date().toISOString(),
+            is_test: isTestMode
         };
 
+        // Transition views without reload
         setTimeout(() => {
             document.getElementById('wa-name').innerText = `${trackSelected} Node`;
             document.getElementById('wa-link').href = trackLinks[trackSelected];
             document.getElementById('registration-view').classList.add('hidden');
             document.getElementById('onboarding-view').classList.remove('hidden');
-        }, 1000);
-    });
+            window.scrollTo(0, 0);
+        }, 800);
+
+        return false;
+    };
 
     window.completeStep = (step) => {
         const el = document.getElementById(`step-${step}`);
@@ -362,20 +373,22 @@
     window.saveToCloud = async () => {
         const btn = document.getElementById('final-btn');
         btn.disabled = true;
-        btn.innerText = 'Finalizing Registry...';
+        btn.innerText = 'Synchronizing Ledger...';
 
         try {
             // Backup Email Log (Web3Forms)
             const fd = new FormData();
             fd.append("access_key", WEB3_KEY);
-            fd.append("subject", `New SFID: ${sessionState.sfid}`);
+            fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}New Registration: ${sessionState.sfid}`);
+            fd.append("from_name", "SkillForge Security Node");
             fd.append("name", sessionState.name);
             fd.append("email", sessionState.email);
             fd.append("phone", sessionState.phone);
             fd.append("track", sessionState.track);
             fd.append("sfid", sessionState.sfid);
             fd.append("challenge", sessionState.challenge);
-            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd });
+            
+            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(e => console.warn("Log Delay", e));
 
             // Official Ledger Write (Firestore)
             if (user) {
@@ -388,7 +401,8 @@
             showSuccess();
         } catch (err) {
             btn.disabled = false;
-            btn.innerText = 'Sync Error - Retry';
+            btn.innerText = 'Final Sync Failed - Retry';
+            console.error(err);
         }
     };
 
@@ -401,8 +415,9 @@
         document.getElementById('print-track').innerText = sessionState.track;
         document.getElementById('print-challenge').innerText = sessionState.challenge === 'Yes' ? 'ENROLLED' : 'FOUNDATION ONLY';
         document.getElementById('print-date').innerText = new Date().toLocaleDateString('en-GB');
-        document.getElementById('print-ref').innerText = `#SF-${Math.floor(Math.random()*900 + 100)}`;
+        document.getElementById('print-ref').innerText = sessionState.is_test ? "#SF-DEMO" : `#SF-${Math.floor(Math.random()*900 + 100)}`;
         document.getElementById('print-hash').innerText = `SF_ACTIVE_${btoa(sessionState.sfid).slice(0,10).toUpperCase()}`;
+        window.scrollTo(0, 0);
     }
 
     lucide.createIcons();

@@ -6,10 +6,6 @@
   <title>SkillForge Academy • Quantum Secure Registry</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Firebase Core -->
-  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
-  <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
   <style>
     @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
     @keyframes zoom-in { from { transform: scale(0.98); opacity: 0; } to { transform: scale(1); opacity: 1; } }
@@ -32,7 +28,6 @@
   </div>
 
   <div class="relative z-10 max-w-4xl mx-auto px-6 py-12 flex flex-col items-center">
-    <!-- Header Node -->
     <header class="w-full flex justify-between items-center mb-10 no-print">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
@@ -52,7 +47,6 @@
     </header>
 
     <main id="app-container" class="w-full max-w-2xl no-print">
-      <!-- Error Modal -->
       <div id="error-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <div class="bg-[#1a1f29] border border-rose-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
               <div class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-500">
@@ -64,7 +58,6 @@
           </div>
       </div>
 
-      <!-- Registration Form -->
       <div id="registration-view" class="bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl animate-in">
         <div class="p-8 md:p-12">
             <div class="mb-10 text-center">
@@ -72,7 +65,7 @@
                 <p class="text-slate-400 text-sm">Official Foundation Entry • Phase 1 Registration</p>
             </div>
 
-            <form id="registration-form" class="space-y-6">
+            <form id="registration-form" class="space-y-6" onsubmit="return false;">
                 <div class="space-y-5">
                   <div>
                     <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Full Legal Name</label>
@@ -134,7 +127,6 @@
         </div>
       </div>
 
-      <!-- Verification Steps -->
       <div id="onboarding-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
         <div class="p-8 md:p-12 text-center">
             <h2 class="text-3xl font-black mb-2 tracking-tight">Security Verification</h2>
@@ -178,7 +170,6 @@
         </div>
       </div>
 
-      <!-- Success View -->
       <div id="success-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] p-12 text-center zoom-in">
         <div class="w-20 h-20 bg-blue-500/10 border border-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
           <i data-lucide="shield-check" class="w-10 h-10"></i>
@@ -191,7 +182,6 @@
       </div>
     </main>
 
-    <!-- PRINT SLIP (Invisible until print) -->
     <div id="print-slip" class="hidden fixed inset-0 bg-white text-black p-10 z-[999]">
       <div class="max-w-3xl mx-auto border-[6px] border-black p-12 relative bg-white min-h-[900px] flex flex-col justify-between">
         <div class="flex justify-between items-start border-b-[4px] border-black pb-8">
@@ -256,6 +246,17 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, addDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
+    // Firebase Config provided by User
+    const firebaseConfig = {
+      apiKey: "AIzaSyBUdigfl1lyCmZ0xrC0b0XgNoBl_XbgWVw",
+      authDomain: "skillforge-registry.firebaseapp.com",
+      projectId: "skillforge-registry",
+      storageBucket: "skillforge-registry.firebasestorage.app",
+      messagingSenderId: "778485483720",
+      appId: "1:778485483720:web:ea6b225ef7ee442df5fdfd",
+      measurementId: "G-NYNP1G2BWF"
+    };
+
     const WEB3_KEY = "dec36845-d08f-486c-a201-9c549445dcbd";
     const trackCodes = { "Forex Synthetic Indices": "FXS", "Graphics Design": "GRD", "Stock Market Trading": "STK", "Web Design & Development": "WDD", "Forex Currency Pairs": "FXC", "Discord Design & Development": "DDC", "Photography & Editing": "PHO", "Cybersecurity": "CYB" };
     const trackLinks = {
@@ -269,7 +270,6 @@
         "Cybersecurity": "https://chat.whatsapp.com/IvOiX5PtcoQ0OnBe7bfwHF"
     };
 
-    const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -286,7 +286,7 @@
                 user = u;
                 if (user) syncData();
             });
-        } catch (e) { console.error("Auth Loop Fail", e); }
+        } catch (e) { console.error("Firebase Auth Loop Fail", e); }
     };
 
     function syncData() {
@@ -296,25 +296,23 @@
             cloudRegistry = snap.docs.map(doc => doc.data());
             const total = cloudRegistry.length + 110;
             document.getElementById('live-counter').innerText = `GLOBAL_NODES: ${total} ACTIVE`;
-        }, (err) => console.warn("Sync Restricted", err));
+        }, (err) => console.warn("Registry Sync Blocked", err));
     }
 
     startApp();
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
-    // FIX: Core Form Handler Attached Directly to Prevent Page Refresh
     const registrationForm = document.getElementById('registration-form');
     registrationForm.addEventListener('submit', function(e) {
-        e.preventDefault(); // This stops the page from "wiping off"
+        e.preventDefault(); // MANDATORY: Stop default page refresh
         
         const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
         const isTestMode = nameInput === "SKILLFORGE TEST";
         
-        // Check for Duplicates (Excluding test mode)
         const isDuplicate = !isTestMode && cloudRegistry.some(r => r.name === nameInput);
         if (isDuplicate) {
-            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered. Access Restricted.`;
+            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered.`;
             document.getElementById('error-modal').classList.remove('hidden');
             return;
         }
@@ -328,7 +326,6 @@
         const tCode = trackCodes[trackSelected];
         const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
         
-        // Generate SFID
         const generatedSFID = isTestMode ? "SF26-TEST-999" : `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
 
         sessionState = {
@@ -342,7 +339,6 @@
             is_test: isTestMode
         };
 
-        // Transition views
         setTimeout(() => {
             document.getElementById('wa-name').innerText = `${trackSelected} Node`;
             document.getElementById('wa-link').href = trackLinks[trackSelected];
@@ -372,7 +368,6 @@
         lucide.createIcons();
 
         try {
-            // Log to Web3Forms
             const fd = new FormData();
             fd.append("access_key", WEB3_KEY);
             fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}Reg: ${sessionState.sfid}`);
@@ -380,17 +375,14 @@
             fd.append("email", sessionState.email);
             fd.append("track", sessionState.track);
             fd.append("sfid", sessionState.sfid);
-            
             fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
 
-            // Firestore Save
             if (user) {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
                     ...sessionState,
                     ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
                 });
             }
-
             showSuccess();
         } catch (err) {
             btn.disabled = false;
@@ -416,3 +408,4 @@
   </script>
 </body>
 </html>
+

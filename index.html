@@ -26,12 +26,14 @@
 </head>
 <body class="min-h-screen bg-[#0a0c10] text-slate-100 font-sans selection:bg-blue-500/30">
 
+  <!-- Background Layer -->
   <div class="fixed inset-0 overflow-hidden pointer-events-none no-print">
     <div class="absolute top-[-5%] left-[-5%] w-[30%] h-[30%] bg-blue-600/5 blur-[100px] rounded-full"></div>
     <div class="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-indigo-600/5 blur-[100px] rounded-full"></div>
   </div>
 
   <div class="relative z-10 max-w-4xl mx-auto px-6 py-12 flex flex-col items-center">
+    <!-- Header Node -->
     <header class="w-full flex justify-between items-center mb-10 no-print">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-900/20">
@@ -46,11 +48,12 @@
         <span class="text-[10px] font-bold text-blue-500 uppercase tracking-widest flex items-center gap-2">
             <div class="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div> Live Security Active
         </span>
-        <span id="live-counter" class="text-[9px] text-slate-600 font-mono mt-1 uppercase">Connecting Node...</span>
+        <span id="live-counter" class="text-[9px] text-slate-600 font-mono mt-1 uppercase">Synchronizing Ledger...</span>
       </div>
     </header>
 
     <main id="app-container" class="w-full max-w-2xl no-print">
+      <!-- Error Feedback -->
       <div id="error-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <div class="bg-[#1a1f29] border border-rose-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
               <div class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-500">
@@ -62,11 +65,12 @@
           </div>
       </div>
 
+      <!-- Step 1: Input -->
       <div id="registration-view" class="bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
         <div class="p-8 md:p-12">
             <div class="mb-10 text-center">
                 <h2 class="text-3xl font-black mb-2 tracking-tight">Smart Enrollment</h2>
-                <p class="text-slate-400 text-sm">Secure Entry into the SkillForge Digital Ecosystem.</p>
+                <p class="text-slate-400 text-sm">Official Foundation Entry • Phase 1 Registration</p>
             </div>
 
             <form id="registration-form" class="space-y-6">
@@ -119,7 +123,7 @@
                   <div class="flex items-start gap-3 p-2">
                     <input required type="checkbox" id="terms" class="mt-1 w-4 h-4 rounded border-white/10 bg-white/5">
                     <label for="terms" class="text-[10px] text-slate-500 leading-relaxed uppercase font-bold">
-                        I agree that my data will be locked to the Global Registry. Duplicate entries will trigger a security blacklist.
+                        I acknowledge that duplicate entries will result in a permanent security blacklist from all 2026 tiers.
                     </label>
                   </div>
                 </div>
@@ -131,6 +135,7 @@
         </div>
       </div>
 
+      <!-- Step 2: Connections -->
       <div id="onboarding-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
         <div class="p-8 md:p-12 text-center">
             <h2 class="text-3xl font-black mb-2 tracking-tight">Security Verification</h2>
@@ -142,7 +147,7 @@
                         <div class="w-10 h-10 bg-[#5865F2]/20 rounded-lg flex items-center justify-center text-[#5865F2]"><i data-lucide="message-square" class="w-5 h-5"></i></div>
                         <div>
                             <h3 class="font-bold text-sm">Discord Main Hub</h3>
-                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Infrastructure Node</p>
+                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Academic Infrastructure</p>
                         </div>
                     </div>
                     <a href="https://discord.gg/JyegEXMXx" target="_blank" onclick="completeStep('discord')" class="bg-[#5865F2] text-white text-[9px] font-black px-4 py-2 rounded-lg uppercase">Verify Node</a>
@@ -153,7 +158,7 @@
                         <div class="w-10 h-10 bg-[#0088cc]/20 rounded-lg flex items-center justify-center text-[#0088cc]"><i data-lucide="video" class="w-5 h-5"></i></div>
                         <div>
                             <h3 class="font-bold text-sm">Telegram Live Class</h3>
-                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Academic Stream</p>
+                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Live Session Stream</p>
                         </div>
                     </div>
                     <a href="https://t.me/skillforgeorg" target="_blank" onclick="completeStep('telegram')" class="bg-[#0088cc] text-white text-[9px] font-black px-4 py-2 rounded-lg uppercase">Join Stream</a>
@@ -164,34 +169,36 @@
                         <div class="w-10 h-10 bg-[#25D366]/20 rounded-lg flex items-center justify-center text-[#25D366]"><i data-lucide="lock" class="w-5 h-5"></i></div>
                         <div>
                             <h3 class="font-bold text-sm" id="wa-name">Classroom Node</h3>
-                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Encrypted Track Endpoint</p>
+                            <p class="text-[9px] text-slate-500 uppercase font-black tracking-tighter">Official Track Endpoint</p>
                         </div>
                     </div>
                     <a id="wa-link" href="#" target="_blank" onclick="completeStep('whatsapp')" class="bg-[#25D366] text-white text-[9px] font-black px-4 py-2 rounded-lg uppercase">Request Access</a>
                 </div>
             </div>
-            <button id="final-btn" onclick="saveToCloud()" class="hidden w-full mt-8 bg-white text-black py-4 rounded-xl font-black uppercase text-xs tracking-widest animate-in hover:bg-blue-50">Generate Quantum ID Slip</button>
+            <button id="final-btn" onclick="saveToCloud()" class="hidden w-full mt-8 bg-white text-black py-4 rounded-xl font-black uppercase text-xs tracking-widest animate-in hover:bg-blue-50">Generate Registry Slip</button>
         </div>
       </div>
 
+      <!-- Step 3: Success -->
       <div id="success-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] p-12 text-center zoom-in">
         <div class="w-20 h-20 bg-blue-500/10 border border-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
           <i data-lucide="shield-check" class="w-10 h-10"></i>
         </div>
-        <h2 class="text-3xl font-black mb-2 tracking-tight">Security Synchronized</h2>
-        <p class="text-slate-400 text-sm mb-12 uppercase font-bold tracking-tight">Node active. Your data is now locked in the Sovereign Ledger.</p>
+        <h2 class="text-3xl font-black mb-2 tracking-tight">Node Activated</h2>
+        <p class="text-slate-400 text-sm mb-12 uppercase font-bold tracking-tight">Your data is officially locked to the SF-2026-BI Index.</p>
         <button onclick="window.print()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-black uppercase text-xs tracking-[0.2em] shadow-xl flex items-center justify-center gap-2 mb-3 hover:bg-blue-500 transition-all">
           Generate Registry Slip <i data-lucide="printer" class="w-4 h-4"></i>
         </button>
       </div>
     </main>
 
+    <!-- PRINT SLIP -->
     <div id="print-slip" class="hidden fixed inset-0 bg-white text-black p-10 z-[999]">
       <div class="max-w-3xl mx-auto border-[6px] border-black p-12 relative bg-white min-h-[900px] flex flex-col justify-between">
         <div class="flex justify-between items-start border-b-[4px] border-black pb-8">
           <div>
             <h1 class="text-5xl font-black uppercase tracking-tighter leading-none mb-2">SkillForge Academy</h1>
-            <p class="text-[11px] font-black uppercase tracking-[0.5em] text-slate-400">Digital Smart Systems Registry • 2026</p>
+            <p class="text-[11px] font-black uppercase tracking-[0.5em] text-slate-400">Official Student Registry • 2026</p>
           </div>
           <div class="text-right">
             <span class="text-[9px] font-black uppercase block text-slate-400 mb-1">Quantum Hash</span>
@@ -207,11 +214,11 @@
           
           <div class="grid grid-cols-1 gap-12">
             <div>
-                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2">Candidate Identity</label>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2">Full Legal Name</label>
                 <p class="text-3xl font-black uppercase border-b-2 border-slate-100 pb-3" id="print-name">—</p>
             </div>
             <div>
-                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2">Assigned Skill Node</label>
+                <label class="block text-[10px] font-black uppercase text-slate-400 mb-2">Assigned Skill Path</label>
                 <p class="text-3xl font-black uppercase border-b-2 border-slate-100 pb-3" id="print-track">—</p>
             </div>
           </div>
@@ -229,7 +236,7 @@
         </div>
 
         <div class="mt-20 p-8 bg-slate-50 border-l-[8px] border-blue-600">
-            <p class="text-[11px] text-slate-700 leading-relaxed font-bold uppercase tracking-tight italic">Registry Notice: This SFID grants access to beginner levels only. No Professional Titles are assigned at the foundation stage.</p>
+            <p class="text-[11px] text-slate-700 leading-relaxed font-bold uppercase tracking-tight italic">Notice: This Registry Slip represents Foundation (Phase 1) enrollment. Professional certification requires completion of all tier levels.</p>
         </div>
 
         <div class="flex justify-between items-end mt-12 pt-12 border-t-2 border-black/10">
@@ -247,9 +254,11 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, addDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
+    // Constants
+    const WEB3_KEY = "dec36845-d08f-486c-a201-9c549445dcbd";
     const trackCodes = { "Forex Synthetic Indices": "FXS", "Graphics Design": "GRD", "Stock Market Trading": "STK", "Web Design & Development": "WDD", "Forex Currency Pairs": "FXC", "Discord Design & Development": "DDC", "Photography & Editing": "PHO", "Cybersecurity": "CYB" };
     const trackLinks = {
         "Forex Synthetic Indices": "https://chat.whatsapp.com/FSFe8YkhdPg9SvwwD7kMvS",
@@ -262,6 +271,7 @@
         "Cybersecurity": "https://chat.whatsapp.com/IvOiX5PtcoQ0OnBe7bfwHF"
     };
 
+    // Firebase
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -272,81 +282,68 @@
     let cloudRegistry = [];
     let sessionState = {};
 
-    // Fixed Auth Flow: Rule 3 Compliance
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth Failure:", err);
-      }
+    // Auth & Sync Logic
+    const startApp = async () => {
+        try {
+            await signInAnonymously(auth);
+            onAuthStateChanged(auth, (u) => {
+                user = u;
+                if (user) syncData();
+            });
+        } catch (e) { console.error("Auth Loop Fail", e); }
     };
 
-    onAuthStateChanged(auth, (u) => {
-      user = u;
-      if (user) {
-        syncRegistry();
-      }
-    });
-
-    initAuth();
-
-    function syncRegistry() {
-      // Rule 3: Guard Firestore operation
-      if (!user) return;
-
-      const q = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
-      onSnapshot(q, (snapshot) => {
-        cloudRegistry = snapshot.docs.map(doc => doc.data());
-        const total = cloudRegistry.length + 110; 
-        document.getElementById('live-counter').innerText = `GLOBAL_NODES: ${total} ACTIVE`;
-      }, (error) => {
-        console.error("Registry Sync Error:", error);
-      });
+    function syncData() {
+        if (!user) return;
+        const q = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+        onSnapshot(q, (snap) => {
+            cloudRegistry = snap.docs.map(doc => doc.data());
+            const total = cloudRegistry.length + 110;
+            document.getElementById('live-counter').innerText = `GLOBAL_NODES: ${total} ACTIVE`;
+        }, (err) => console.warn("Sync Restricted", err));
     }
+
+    startApp();
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
+    // Step 1 Submission
     const form = document.getElementById('registration-form');
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
-        const trackSelected = document.getElementById('track').value;
         
         const isDuplicate = cloudRegistry.some(r => r.name === nameInput);
         if (isDuplicate) {
-            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already active in the Sovereign Ledger. Access Restricted.`;
+            document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered. Duplicate entries are blocked.`;
             document.getElementById('error-modal').classList.remove('hidden');
             return;
         }
 
         const btn = document.getElementById('submit-btn');
         btn.disabled = true;
-        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Verifying Sovereign Node...';
-        lucide.createIcons();
+        btn.innerHTML = 'Verifying Identity Node...';
 
+        const trackSelected = document.getElementById('track').value;
+        const tCode = trackCodes[trackSelected];
+        const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
+        
         sessionState = {
             name: nameInput,
             track: trackSelected,
             challenge: form.challenge.value,
             phone: document.getElementById('phone').value,
             email: document.getElementById('email').value,
+            sfid: `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`,
             timestamp: new Date().toISOString()
         };
-
-        const tCode = trackCodes[trackSelected];
-        const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
-        sessionState.sfid = `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
 
         setTimeout(() => {
             document.getElementById('wa-name').innerText = `${trackSelected} Node`;
             document.getElementById('wa-link').href = trackLinks[trackSelected];
             document.getElementById('registration-view').classList.add('hidden');
             document.getElementById('onboarding-view').classList.remove('hidden');
-        }, 1200);
+        }, 1000);
     });
 
     window.completeStep = (step) => {
@@ -363,38 +360,35 @@
     };
 
     window.saveToCloud = async () => {
-        if (!user) {
-            console.error("Unauthenticated save attempt");
-            return;
-        }
-
         const btn = document.getElementById('final-btn');
         btn.disabled = true;
-        btn.innerHTML = 'Writing to Ledger...';
+        btn.innerText = 'Finalizing Registry...';
 
         try {
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
-                ...sessionState,
-                ledger_id: Math.random().toString(36).substring(7).toUpperCase()
-            });
+            // Backup Email Log (Web3Forms)
+            const fd = new FormData();
+            fd.append("access_key", WEB3_KEY);
+            fd.append("subject", `New SFID: ${sessionState.sfid}`);
+            fd.append("name", sessionState.name);
+            fd.append("email", sessionState.email);
+            fd.append("phone", sessionState.phone);
+            fd.append("track", sessionState.track);
+            fd.append("sfid", sessionState.sfid);
+            fd.append("challenge", sessionState.challenge);
+            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd });
 
-            const web3FormAction = "https://api.web3forms.com/submit";
-            const formData = new FormData();
-            formData.append("access_key", "YOUR_ACCESS_KEY_HERE"); 
-            formData.append("name", sessionState.name);
-            formData.append("email", sessionState.email);
-            formData.append("phone", sessionState.phone);
-            formData.append("track", sessionState.track);
-            formData.append("sfid", sessionState.sfid);
-            formData.append("challenge", sessionState.challenge);
-            
-            fetch(web3FormAction, { method: "POST", body: formData }).catch(e => console.warn("Email Log Delay", e));
+            // Official Ledger Write (Firestore)
+            if (user) {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
+                    ...sessionState,
+                    ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
+                });
+            }
 
             showSuccess();
         } catch (err) {
             btn.disabled = false;
             btn.innerText = 'Sync Error - Retry';
-            console.error(err);
         }
     };
 
@@ -405,10 +399,10 @@
         document.getElementById('print-sfid').innerText = sessionState.sfid;
         document.getElementById('print-name').innerText = sessionState.name;
         document.getElementById('print-track').innerText = sessionState.track;
-        document.getElementById('print-challenge').innerText = sessionState.challenge === 'Yes' ? 'VERIFIED_ENTRY' : 'OPTED_OUT';
+        document.getElementById('print-challenge').innerText = sessionState.challenge === 'Yes' ? 'ENROLLED' : 'FOUNDATION ONLY';
         document.getElementById('print-date').innerText = new Date().toLocaleDateString('en-GB');
         document.getElementById('print-ref').innerText = `#SF-${Math.floor(Math.random()*900 + 100)}`;
-        document.getElementById('print-hash').innerText = `QUANTUM_ACTIVE_${btoa(sessionState.sfid).slice(0,12).toUpperCase()}`;
+        document.getElementById('print-hash').innerText = `SF_ACTIVE_${btoa(sessionState.sfid).slice(0,10).toUpperCase()}`;
     }
 
     lucide.createIcons();

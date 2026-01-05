@@ -26,7 +26,6 @@
 </head>
 <body class="min-h-screen bg-[#0a0c10] text-slate-100 font-sans selection:bg-blue-500/30">
 
-  <!-- Background Layer -->
   <div class="fixed inset-0 overflow-hidden pointer-events-none no-print">
     <div class="absolute top-[-5%] left-[-5%] w-[30%] h-[30%] bg-blue-600/5 blur-[100px] rounded-full"></div>
     <div class="absolute bottom-[-5%] right-[-5%] w-[30%] h-[30%] bg-indigo-600/5 blur-[100px] rounded-full"></div>
@@ -53,7 +52,7 @@
     </header>
 
     <main id="app-container" class="w-full max-w-2xl no-print">
-      <!-- Error Feedback -->
+      <!-- Error Modal -->
       <div id="error-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <div class="bg-[#1a1f29] border border-rose-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
               <div class="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto mb-4 text-rose-500">
@@ -61,39 +60,39 @@
               </div>
               <h3 class="text-xl font-bold mb-2 uppercase tracking-tight">Access Denied</h3>
               <p id="error-message" class="text-slate-400 text-xs mb-6 uppercase tracking-tight font-bold"></p>
-              <button onclick="closeError()" class="w-full bg-rose-500 text-white py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest">Acknowledge</button>
+              <button type="button" onclick="closeError()" class="w-full bg-rose-500 text-white py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest">Acknowledge</button>
           </div>
       </div>
 
-      <!-- Step 1: Input -->
-      <div id="registration-view" class="bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
+      <!-- Registration Form -->
+      <div id="registration-view" class="bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl animate-in">
         <div class="p-8 md:p-12">
             <div class="mb-10 text-center">
                 <h2 class="text-3xl font-black mb-2 tracking-tight">Smart Enrollment</h2>
                 <p class="text-slate-400 text-sm">Official Foundation Entry • Phase 1 Registration</p>
             </div>
 
-            <form id="registration-form" onsubmit="return handleFormSubmit(event)" class="space-y-6">
+            <form id="registration-form" class="space-y-6">
                 <div class="space-y-5">
                   <div>
                     <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Full Legal Name</label>
-                    <input required type="text" name="name" id="fullName" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all uppercase" placeholder="SURNAME FIRSTNAME MIDDLENAME" />
+                    <input required type="text" id="fullName" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all uppercase" placeholder="SURNAME FIRSTNAME MIDDLENAME" />
                   </div>
                   
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">WhatsApp Contact</label>
-                      <input required type="tel" name="phone" id="phone" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all" placeholder="+234..." />
+                      <input required type="tel" id="phone" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all" placeholder="+234..." />
                     </div>
                     <div>
                       <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Email Node</label>
-                      <input required type="email" name="email" id="email" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all" placeholder="user@skillforge.com" />
+                      <input required type="email" id="email" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all" placeholder="user@skillforge.com" />
                     </div>
                   </div>
     
                   <div>
                     <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">Skill Specialization</label>
-                    <select required name="track" id="track" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all">
+                    <select required id="track" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 focus:outline-none focus:border-blue-500 text-sm transition-all">
                       <option value="" disabled selected>Select Path...</option>
                       <option value="Forex Synthetic Indices">Forex Synthetic Indices</option>
                       <option value="Graphics Design">Graphics Design</option>
@@ -135,7 +134,7 @@
         </div>
       </div>
 
-      <!-- Step 2: Connections -->
+      <!-- Verification Steps -->
       <div id="onboarding-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
         <div class="p-8 md:p-12 text-center">
             <h2 class="text-3xl font-black mb-2 tracking-tight">Security Verification</h2>
@@ -179,7 +178,7 @@
         </div>
       </div>
 
-      <!-- Step 3: Success -->
+      <!-- Success View -->
       <div id="success-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] p-12 text-center zoom-in">
         <div class="w-20 h-20 bg-blue-500/10 border border-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6 text-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.2)]">
           <i data-lucide="shield-check" class="w-10 h-10"></i>
@@ -192,7 +191,7 @@
       </div>
     </main>
 
-    <!-- PRINT SLIP -->
+    <!-- PRINT SLIP (Invisible until print) -->
     <div id="print-slip" class="hidden fixed inset-0 bg-white text-black p-10 z-[999]">
       <div class="max-w-3xl mx-auto border-[6px] border-black p-12 relative bg-white min-h-[900px] flex flex-col justify-between">
         <div class="flex justify-between items-start border-b-[4px] border-black pb-8">
@@ -257,7 +256,6 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
     import { getFirestore, collection, addDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-    // Constants
     const WEB3_KEY = "dec36845-d08f-486c-a201-9c549445dcbd";
     const trackCodes = { "Forex Synthetic Indices": "FXS", "Graphics Design": "GRD", "Stock Market Trading": "STK", "Web Design & Development": "WDD", "Forex Currency Pairs": "FXC", "Discord Design & Development": "DDC", "Photography & Editing": "PHO", "Cybersecurity": "CYB" };
     const trackLinks = {
@@ -271,7 +269,6 @@
         "Cybersecurity": "https://chat.whatsapp.com/IvOiX5PtcoQ0OnBe7bfwHF"
     };
 
-    // Firebase
     const firebaseConfig = JSON.parse(__firebase_config);
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
@@ -282,7 +279,6 @@
     let cloudRegistry = [];
     let sessionState = {};
 
-    // Auth & Sync Logic
     const startApp = async () => {
         try {
             await signInAnonymously(auth);
@@ -307,31 +303,32 @@
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
-    // Step 1 Submission
-    window.handleFormSubmit = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
+    // FIX: Core Form Handler Attached Directly to Prevent Page Refresh
+    const registrationForm = document.getElementById('registration-form');
+    registrationForm.addEventListener('submit', function(e) {
+        e.preventDefault(); // This stops the page from "wiping off"
         
         const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
         const isTestMode = nameInput === "SKILLFORGE TEST";
         
-        // Duplicate Check (Skip if Test Mode)
+        // Check for Duplicates (Excluding test mode)
         const isDuplicate = !isTestMode && cloudRegistry.some(r => r.name === nameInput);
         if (isDuplicate) {
             document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered. Access Restricted.`;
             document.getElementById('error-modal').classList.remove('hidden');
-            return false;
+            return;
         }
 
         const btn = document.getElementById('submit-btn');
         btn.disabled = true;
-        btn.innerHTML = 'Securing Initial Node...';
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Securing Node...';
+        lucide.createIcons();
 
         const trackSelected = document.getElementById('track').value;
         const tCode = trackCodes[trackSelected];
         const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
         
-        // SFID Generation (Special Demo ID for test mode)
+        // Generate SFID
         const generatedSFID = isTestMode ? "SF26-TEST-999" : `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
 
         sessionState = {
@@ -345,7 +342,7 @@
             is_test: isTestMode
         };
 
-        // Transition views without reload
+        // Transition views
         setTimeout(() => {
             document.getElementById('wa-name').innerText = `${trackSelected} Node`;
             document.getElementById('wa-link').href = trackLinks[trackSelected];
@@ -353,9 +350,7 @@
             document.getElementById('onboarding-view').classList.remove('hidden');
             window.scrollTo(0, 0);
         }, 800);
-
-        return false;
-    };
+    });
 
     window.completeStep = (step) => {
         const el = document.getElementById(`step-${step}`);
@@ -373,24 +368,22 @@
     window.saveToCloud = async () => {
         const btn = document.getElementById('final-btn');
         btn.disabled = true;
-        btn.innerText = 'Synchronizing Ledger...';
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Finalizing...';
+        lucide.createIcons();
 
         try {
-            // Backup Email Log (Web3Forms)
+            // Log to Web3Forms
             const fd = new FormData();
             fd.append("access_key", WEB3_KEY);
-            fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}New Registration: ${sessionState.sfid}`);
-            fd.append("from_name", "SkillForge Security Node");
+            fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}Reg: ${sessionState.sfid}`);
             fd.append("name", sessionState.name);
             fd.append("email", sessionState.email);
-            fd.append("phone", sessionState.phone);
             fd.append("track", sessionState.track);
             fd.append("sfid", sessionState.sfid);
-            fd.append("challenge", sessionState.challenge);
             
-            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(e => console.warn("Log Delay", e));
+            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
 
-            // Official Ledger Write (Firestore)
+            // Firestore Save
             if (user) {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
                     ...sessionState,
@@ -401,8 +394,7 @@
             showSuccess();
         } catch (err) {
             btn.disabled = false;
-            btn.innerText = 'Final Sync Failed - Retry';
-            console.error(err);
+            btn.innerText = 'Sync Error - Retry';
         }
     };
 

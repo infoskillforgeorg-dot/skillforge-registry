@@ -244,7 +244,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, addDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
     // Firebase Config provided by User
     const firebaseConfig = {
@@ -303,6 +303,37 @@
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
+    // Fetch public IP using ipify (used only to enforce 1-IP registration)
+    async function getPublicIp() {
+      try {
+        const res = await fetch('https://api.ipify.org?format=json', { cache: 'no-store' });
+        if (!res.ok) throw new Error('ip-fetch-failed');
+        const j = await res.json();
+        return j.ip || null;
+      } catch (e) {
+        console.warn('Public IP fetch failed', e);
+        return null;
+      }
+    }
+
+    // Hash string with SHA-256 -> hex
+    async function sha256hex(value) {
+      const enc = new TextEncoder();
+      const data = enc.encode(value);
+      const hash = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Normalize phone/email helpers
+    function normalizePhone(raw) {
+      if (!raw) return '';
+      const digits = raw.replace(/\D/g, '');
+      return digits.slice(-15);
+    }
+    function normalizeEmail(e) {
+      return (e || '').trim().toLowerCase();
+    }
+
     const registrationForm = document.getElementById('registration-form');
     registrationForm.addEventListener('submit', function(e) {
         e.preventDefault(); // MANDATORY: Stop default page refresh
@@ -331,7 +362,7 @@
         sessionState = {
             name: nameInput,
             track: trackSelected,
-            challenge: document.querySelector('input[name="challenge"]:checked').value,
+            challenge: (document.querySelector('input[name="challenge"]:checked') || {}).value,
             phone: document.getElementById('phone').value,
             email: document.getElementById('email').value,
             sfid: generatedSFID,
@@ -378,15 +409,86 @@
             fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
 
             if (user) {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
-                    ...sessionState,
-                    ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
-                });
+                if (sessionState.is_test) {
+                    // keep original test behavior
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
+                        ...sessionState,
+                        ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
+                    });
+                } else {
+                    // 1-IP + phone + email enforcement (client-side atomic transaction)
+                    const ip = await getPublicIp();
+                    if (!ip) throw new Error('IP_NOT_AVAILABLE');
+                    const ipHash = await sha256hex(ip);
+
+                    const normalizedPhone = normalizePhone(sessionState.phone) || '__EMPTY__';
+                    const normalizedEmail = normalizeEmail(sessionState.email) || '__EMPTY__';
+
+                    const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+                    const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
+                    const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
+
+                    const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+                    const newRegRef = doc(regsCol);
+
+                    await runTransaction(db, async (tx) => {
+                        const ipSnap = await tx.get(ipIndexRef);
+                        if (ipSnap.exists()) throw new Error('IP_ALREADY_REGISTERED');
+
+                        const phoneSnap = await tx.get(phoneIndexRef);
+                        if (phoneSnap.exists() && phoneSnap.data().uid !== user.uid) throw new Error('PHONE_ALREADY_REGISTERED');
+
+                        const emailSnap = await tx.get(emailIndexRef);
+                        if (emailSnap.exists() && emailSnap.data().uid !== user.uid) throw new Error('EMAIL_ALREADY_REGISTERED');
+
+                        // write registration and indexes atomically
+                        tx.set(newRegRef, {
+                            ...sessionState,
+                            ledger_ref: Math.random().toString(36).substring(7).toUpperCase(),
+                            created_by: user.uid,
+                            created_at: serverTimestamp()
+                        });
+
+                        tx.set(ipIndexRef, {
+                            uid: user.uid,
+                            sfid: sessionState.sfid,
+                            created_at: serverTimestamp()
+                        });
+
+                        tx.set(phoneIndexRef, {
+                            uid: user.uid,
+                            sfid: sessionState.sfid,
+                            phone: normalizedPhone,
+                            created_at: serverTimestamp()
+                        });
+
+                        tx.set(emailIndexRef, {
+                            uid: user.uid,
+                            sfid: sessionState.sfid,
+                            email: normalizedEmail,
+                            created_at: serverTimestamp()
+                        });
+                    });
+                }
             }
             showSuccess();
         } catch (err) {
             btn.disabled = false;
             btn.innerText = 'Sync Error - Retry';
+            console.error('saveToCloud error', err);
+
+            if (err && err.message === 'IP_ALREADY_REGISTERED') {
+                document.getElementById('error-message').innerText = 'A registration from this IP address already exists.';
+            } else if (err && err.message === 'PHONE_ALREADY_REGISTERED') {
+                document.getElementById('error-message').innerText = 'This phone number is already registered.';
+            } else if (err && err.message === 'EMAIL_ALREADY_REGISTERED') {
+                document.getElementById('error-message').innerText = 'This email is already registered.';
+            } else if (err && err.message === 'IP_NOT_AVAILABLE') {
+                document.getElementById('error-message').innerText = 'Unable to determine your public IP. Please check your connection and try again.';
+            } else {
+                document.getElementById('error-message').innerText = 'Sync error. Please retry or contact support.';
+            }
+            document.getElementById('error-modal').classList.remove('hidden');
         }
     };
 
@@ -408,4 +510,3 @@
   </script>
 </body>
 </html>
-

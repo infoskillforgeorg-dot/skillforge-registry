@@ -370,11 +370,8 @@
         lucide.createIcons();
 
         const trackSelected = document.getElementById('track').value;
-        const tCode = trackCodes[trackSelected];
-        const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
-
-        const generatedSFID = isTestMode ? "SF26-TEST-999" : `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
-
+        // SFID generation moved to saveToCloud transaction for sequential consistency
+        
         sessionState = {
             name: nameInput,
             track: trackSelected,
@@ -383,7 +380,7 @@
             phone_normalized: normalizedPhone,
             email: document.getElementById('email').value,
             email_normalized: normalizeEmail(document.getElementById('email').value),
-            sfid: generatedSFID,
+            sfid: "PENDING_GENERATION",
             timestamp: new Date().toISOString(),
             is_test: isTestMode
         };
@@ -417,18 +414,9 @@
         lucide.createIcons();
 
         try {
-            const fd = new FormData();
-            fd.append("access_key", WEB3_KEY);
-            fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}Reg: ${sessionState.sfid}`);
-            fd.append("name", sessionState.name);
-            fd.append("email", sessionState.email);
-            fd.append("track", sessionState.track);
-            fd.append("sfid", sessionState.sfid);
-            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
-
             if (user) {
                 if (sessionState.is_test) {
-                    // keep original test behavior
+                    sessionState.sfid = "SF26-TEST-999";
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
                         ...sessionState,
                         ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
@@ -441,10 +429,14 @@
 
                     const normalizedPhone = sessionState.phone_normalized || '__EMPTY__';
                     const normalizedEmail = sessionState.email_normalized || '__EMPTY__';
+                    const trackSelected = sessionState.track;
+                    const tCode = trackCodes[trackSelected];
 
                     const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
                     const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
                     const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
+                    
+                    const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
 
                     const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
                     const newRegRef = doc(regsCol);
@@ -459,9 +451,30 @@
                         const emailSnap = await tx.get(emailIndexRef);
                         if (emailSnap.exists() && emailSnap.data().uid !== user.uid) throw new Error('EMAIL_ALREADY_REGISTERED');
 
+                        // --- SFID GENERATION (TRANSACTIONAL) ---
+                        const counterSnap = await tx.get(counterRef);
+                        let currentCount = 0;
+                        
+                        if (counterSnap.exists() && counterSnap.data()[trackSelected] !== undefined) {
+                            currentCount = counterSnap.data()[trackSelected];
+                        } else {
+                            // Fallback: If counter doesn't exist, try to use the locally cached count.
+                            // This handles the migration case where the counter doc is missing but data exists.
+                            const existingForTrack = cloudRegistry.filter(r => r.track === trackSelected).length;
+                            currentCount = existingForTrack;
+                        }
+
+                        const nextCount = currentCount + 1;
+                        // Use existing logic: Count + 20 (e.g. 0 -> 20, 1 -> 21)
+                        const seqNum = nextCount + 20; 
+                        const generatedSFID = `SF26-${tCode}-${String(seqNum).padStart(3, '0')}`;
+                        
+                        sessionState.sfid = generatedSFID;
+
                         // write registration and indexes atomically
                         tx.set(newRegRef, {
                             ...sessionState,
+                            sfid: generatedSFID,
                             ledger_ref: Math.random().toString(36).substring(7).toUpperCase(),
                             created_by: user.uid,
                             created_at: serverTimestamp()
@@ -469,26 +482,42 @@
 
                         tx.set(ipIndexRef, {
                             uid: user.uid,
-                            sfid: sessionState.sfid,
+                            sfid: generatedSFID,
                             created_at: serverTimestamp()
                         });
 
                         tx.set(phoneIndexRef, {
                             uid: user.uid,
-                            sfid: sessionState.sfid,
+                            sfid: generatedSFID,
                             phone: normalizedPhone,
                             created_at: serverTimestamp()
                         });
 
                         tx.set(emailIndexRef, {
                             uid: user.uid,
-                            sfid: sessionState.sfid,
+                            sfid: generatedSFID,
                             email: normalizedEmail,
                             created_at: serverTimestamp()
                         });
+
+                        // Update counter
+                        tx.set(counterRef, {
+                            [trackSelected]: nextCount
+                        }, { merge: true });
                     });
                 }
             }
+            
+            // Send email after successful transaction
+            const fd = new FormData();
+            fd.append("access_key", WEB3_KEY);
+            fd.append("subject", `${sessionState.is_test ? '[TEST] ' : ''}Reg: ${sessionState.sfid}`);
+            fd.append("name", sessionState.name);
+            fd.append("email", sessionState.email);
+            fd.append("track", sessionState.track);
+            fd.append("sfid", sessionState.sfid);
+            fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
+
             showSuccess();
         } catch (err) {
             btn.disabled = false;

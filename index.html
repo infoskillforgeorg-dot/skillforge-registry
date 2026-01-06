@@ -348,10 +348,24 @@
             cloudRegistry = snap.docs.map(doc => doc.data());
             const total = cloudRegistry.length + 110;
             document.getElementById('live-counter').innerText = `GLOBAL_NODES: ${total} ACTIVE`;
+            
+            // Enable form once data is synced
+            const btn = document.getElementById('submit-btn');
+            if (btn.disabled && btn.innerText.includes('Initialize')) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }, (err) => console.warn("Registry Sync Blocked", err));
     }
 
     startApp();
+
+    // Initially disable submit button until sync
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+    });
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
@@ -513,97 +527,110 @@
         lucide.createIcons();
 
         try {
-            if (user) {
-                if (sessionState.is_test) {
-                    sessionState.sfid = "SF26-TEST-999";
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
-                        ...sessionState,
-                        ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
-                    });
-                } else {
-                    // 1-IP + phone + email enforcement (client-side atomic transaction)
-                    const ip = await getPublicIp();
-                    if (!ip) throw new Error('IP_NOT_AVAILABLE');
-                    const ipHash = await sha256hex(ip);
-
-                    const normalizedPhone = sessionState.phone_normalized || '__EMPTY__';
-                    const normalizedEmail = sessionState.email_normalized || '__EMPTY__';
-                    const trackSelected = sessionState.track;
-                    const tCode = trackCodes[trackSelected];
-
-                    const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
-                    const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
-                    const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
-                    
-                    const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
-
-                    const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
-                    const newRegRef = doc(regsCol);
-
-                    await runTransaction(db, async (tx) => {
-                        const ipSnap = await tx.get(ipIndexRef);
-                        if (ipSnap.exists()) throw new Error('IP_ALREADY_REGISTERED');
-
-                        const phoneSnap = await tx.get(phoneIndexRef);
-                        if (phoneSnap.exists() && phoneSnap.data().uid !== user.uid) throw new Error('PHONE_ALREADY_REGISTERED');
-
-                        const emailSnap = await tx.get(emailIndexRef);
-                        if (emailSnap.exists() && emailSnap.data().uid !== user.uid) throw new Error('EMAIL_ALREADY_REGISTERED');
-
-                        // --- SFID GENERATION (TRANSACTIONAL) ---
-                        const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
-                        const counterSnap = await tx.get(counterRef);
-                        let currentCount = 0;
-                        
-                        if (counterSnap.exists() && counterSnap.data()[trackSelected] !== undefined) {
-                            currentCount = counterSnap.data()[trackSelected];
-                        } else {
-                            // Fallback: Use INITIAL_TRACK_COUNTS if counter document/field doesn't exist
-                            currentCount = INITIAL_TRACK_COUNTS[trackSelected] || 0;
-                        }
-
-                        const nextCount = currentCount + 1;
-                        // Continue sequentially from the last count (no arbitrary offset)
-                        const seqNum = nextCount; 
-                        const generatedSFID = `SF26-${tCode}-${String(seqNum).padStart(3, '0')}`;
-                        
-                        sessionState.sfid = generatedSFID;
-
-                        // write registration and indexes atomically
-                        tx.set(newRegRef, {
-                            ...sessionState,
-                            sfid: generatedSFID,
-                            ledger_ref: Math.random().toString(36).substring(7).toUpperCase(),
-                            created_by: user.uid,
-                            created_at: serverTimestamp()
-                        });
-
-                        tx.set(ipIndexRef, {
-                            uid: user.uid,
-                            sfid: generatedSFID,
-                            created_at: serverTimestamp()
-                        });
-
-                        tx.set(phoneIndexRef, {
-                            uid: user.uid,
-                            sfid: generatedSFID,
-                            phone: normalizedPhone,
-                            created_at: serverTimestamp()
-                        });
-
-                        tx.set(emailIndexRef, {
-                            uid: user.uid,
-                            sfid: generatedSFID,
-                            email: normalizedEmail,
-                            created_at: serverTimestamp()
-                        });
-
-                        // Update counter
-                        tx.set(counterRef, {
-                            [trackSelected]: nextCount
-                        }, { merge: true });
-                    });
+            if (!user) {
+                // Try one last silent sign-in attempt
+                try {
+                    await signInAnonymously(auth);
+                } catch(e) {
+                    throw new Error("AUTH_FAILED");
                 }
+            }
+            // Double check user after attempt
+            if (!auth.currentUser) throw new Error("AUTH_FAILED");
+            const currentUser = auth.currentUser;
+
+            if (sessionState.is_test) {
+                sessionState.sfid = "SF26-TEST-999";
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'registrations'), {
+                    ...sessionState,
+                    ledger_ref: Math.random().toString(36).substring(7).toUpperCase()
+                });
+            } else {
+                // 1-IP + phone + email enforcement (client-side atomic transaction)
+                const ip = await getPublicIp();
+                if (!ip) throw new Error('IP_NOT_AVAILABLE');
+                const ipHash = await sha256hex(ip);
+
+                const normalizedPhone = sessionState.phone_normalized || '__EMPTY__';
+                const normalizedEmail = sessionState.email_normalized || '__EMPTY__';
+                const trackSelected = sessionState.track;
+                const tCode = trackCodes[trackSelected];
+
+                const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+                const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
+                const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
+                
+                // Use a consistent reference for the counter
+                const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
+                const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+                const newRegRef = doc(regsCol);
+
+                // Execute transaction and Capture the generated SFID
+                const finalSFID = await runTransaction(db, async (tx) => {
+                    // 1. Security Checks
+                    const ipSnap = await tx.get(ipIndexRef);
+                    if (ipSnap.exists()) throw new Error('IP_ALREADY_REGISTERED');
+
+                    const phoneSnap = await tx.get(phoneIndexRef);
+                    if (phoneSnap.exists() && phoneSnap.data().uid !== currentUser.uid) throw new Error('PHONE_ALREADY_REGISTERED');
+
+                    const emailSnap = await tx.get(emailIndexRef);
+                    if (emailSnap.exists() && emailSnap.data().uid !== currentUser.uid) throw new Error('EMAIL_ALREADY_REGISTERED');
+
+                    // 2. SFID Generation
+                    const counterSnap = await tx.get(counterRef);
+                    let currentCount = 0;
+                    
+                    if (counterSnap.exists() && counterSnap.data()[trackSelected] !== undefined) {
+                        currentCount = counterSnap.data()[trackSelected];
+                    } else {
+                        // Fallback: Use INITIAL_TRACK_COUNTS
+                        currentCount = INITIAL_TRACK_COUNTS[trackSelected] || 0;
+                    }
+
+                    const nextCount = currentCount + 1;
+                    const seqNum = nextCount; 
+                    const generatedSFID = `SF26-${tCode}-${String(seqNum).padStart(3, '0')}`;
+
+                    // 3. Atomic Writes
+                    tx.set(newRegRef, {
+                        ...sessionState,
+                        sfid: generatedSFID,
+                        ledger_ref: Math.random().toString(36).substring(7).toUpperCase(),
+                        created_by: currentUser.uid,
+                        created_at: serverTimestamp()
+                    });
+
+                    tx.set(ipIndexRef, {
+                        uid: currentUser.uid,
+                        sfid: generatedSFID,
+                        created_at: serverTimestamp()
+                    });
+
+                    tx.set(phoneIndexRef, {
+                        uid: currentUser.uid,
+                        sfid: generatedSFID,
+                        phone: normalizedPhone,
+                        created_at: serverTimestamp()
+                    });
+
+                    tx.set(emailIndexRef, {
+                        uid: currentUser.uid,
+                        sfid: generatedSFID,
+                        email: normalizedEmail,
+                        created_at: serverTimestamp()
+                    });
+
+                    // Update counter
+                    tx.set(counterRef, {
+                        [trackSelected]: nextCount
+                    }, { merge: true });
+
+                    return generatedSFID;
+                });
+
+                // Update local session state with the confirmed SFID from transaction
+                sessionState.sfid = finalSFID;
             }
             
             // Send email after successful transaction
@@ -617,21 +644,24 @@
             fetch("https://api.web3forms.com/submit", { method: "POST", body: fd }).catch(() => {});
 
             showSuccess();
+
         } catch (err) {
             btn.disabled = false;
             btn.innerText = 'Sync Error - Retry';
             console.error('saveToCloud error', err);
 
             if (err && err.message === 'IP_ALREADY_REGISTERED') {
-                document.getElementById('error-message').innerText = 'A registration from this IP address already exists.';
+                document.getElementById('error-message').innerText = 'Security Block: This IP address is already registered.';
             } else if (err && err.message === 'PHONE_ALREADY_REGISTERED') {
-                document.getElementById('error-message').innerText = 'This phone number is already registered.';
+                document.getElementById('error-message').innerText = 'Security Block: This phone number is already registered.';
             } else if (err && err.message === 'EMAIL_ALREADY_REGISTERED') {
-                document.getElementById('error-message').innerText = 'This email is already registered.';
+                document.getElementById('error-message').innerText = 'Security Block: This email is already registered.';
             } else if (err && err.message === 'IP_NOT_AVAILABLE') {
-                document.getElementById('error-message').innerText = 'Unable to determine your public IP. Please check your connection and try again.';
+                document.getElementById('error-message').innerText = 'Network Error: Unable to verify public IP. Please refresh.';
+            } else if (err && err.message === 'AUTH_FAILED') {
+                document.getElementById('error-message').innerText = 'Authentication Error: Session expired. Please refresh the page.';
             } else {
-                document.getElementById('error-message').innerText = 'Sync error. Please retry or contact support.';
+                document.getElementById('error-message').innerText = `System Error: ${err.message || 'Unknown error'}. Please retry.`;
             }
             document.getElementById('error-modal').classList.remove('hidden');
         }

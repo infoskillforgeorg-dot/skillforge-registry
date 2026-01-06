@@ -303,6 +303,16 @@
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
 
+    // Normalize phone/email helpers
+    function normalizePhone(raw) {
+      if (!raw) return '';
+      const digits = raw.replace(/\D/g, '');
+      return digits.slice(-15);
+    }
+    function normalizeEmail(e) {
+      return (e || '').trim().toLowerCase();
+    }
+
     // Fetch public IP using ipify (used only to enforce 1-IP registration)
     async function getPublicIp() {
       try {
@@ -324,23 +334,29 @@
       return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
-    // Normalize phone/email helpers
-    function normalizePhone(raw) {
-      if (!raw) return '';
-      const digits = raw.replace(/\D/g, '');
-      return digits.slice(-15);
-    }
-    function normalizeEmail(e) {
-      return (e || '').trim().toLowerCase();
-    }
-
     const registrationForm = document.getElementById('registration-form');
     registrationForm.addEventListener('submit', function(e) {
         e.preventDefault(); // MANDATORY: Stop default page refresh
-        
+
+        // read and normalize phone immediately for pre-check
+        const rawPhone = document.getElementById('phone').value || '';
+        const normalizedPhone = normalizePhone(rawPhone);
+
         const nameInput = document.getElementById('fullName').value.trim().toUpperCase();
         const isTestMode = nameInput === "SKILLFORGE TEST";
-        
+
+        // quick client-side phone duplicate pre-check (uses normalized phone)
+        if (!isTestMode && normalizedPhone) {
+          const conflict = cloudRegistry.some(r => {
+            try { return normalizePhone(r.phone) === normalizedPhone; } catch(e){ return false; }
+          });
+          if (conflict) {
+            document.getElementById('error-message').innerText = 'This phone number is already registered.';
+            document.getElementById('error-modal').classList.remove('hidden');
+            return;
+          }
+        }
+
         const isDuplicate = !isTestMode && cloudRegistry.some(r => r.name === nameInput);
         if (isDuplicate) {
             document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered.`;
@@ -356,15 +372,17 @@
         const trackSelected = document.getElementById('track').value;
         const tCode = trackCodes[trackSelected];
         const trackCount = cloudRegistry.filter(r => r.track === trackSelected).length;
-        
+
         const generatedSFID = isTestMode ? "SF26-TEST-999" : `SF26-${tCode}-${String(trackCount + 20).padStart(3, '0')}`;
 
         sessionState = {
             name: nameInput,
             track: trackSelected,
             challenge: (document.querySelector('input[name="challenge"]:checked') || {}).value,
-            phone: document.getElementById('phone').value,
+            phone: rawPhone,
+            phone_normalized: normalizedPhone,
             email: document.getElementById('email').value,
+            email_normalized: normalizeEmail(document.getElementById('email').value),
             sfid: generatedSFID,
             timestamp: new Date().toISOString(),
             is_test: isTestMode
@@ -421,8 +439,8 @@
                     if (!ip) throw new Error('IP_NOT_AVAILABLE');
                     const ipHash = await sha256hex(ip);
 
-                    const normalizedPhone = normalizePhone(sessionState.phone) || '__EMPTY__';
-                    const normalizedEmail = normalizeEmail(sessionState.email) || '__EMPTY__';
+                    const normalizedPhone = sessionState.phone_normalized || '__EMPTY__';
+                    const normalizedEmail = sessionState.email_normalized || '__EMPTY__';
 
                     const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
                     const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);

@@ -259,6 +259,19 @@
 
     const WEB3_KEY = "dec36845-d08f-486c-a201-9c549445dcbd";
     const trackCodes = { "Forex Synthetic Indices": "FXS", "Graphics Design": "GRD", "Stock Market Trading": "STK", "Web Design & Development": "WDD", "Forex Currency Pairs": "FXC", "Discord Design & Development": "DDC", "Photography & Editing": "PHO", "Cybersecurity": "CYB" };
+    
+    // Initial counts from previous registry (to continue numbering)
+    const INITIAL_TRACK_COUNTS = {
+        "Forex Synthetic Indices": 18,
+        "Graphics Design": 19,
+        "Stock Market Trading": 18,
+        "Web Design & Development": 25,
+        "Forex Currency Pairs": 8,
+        "Discord Design & Development": 2,
+        "Photography & Editing": 9,
+        "Cybersecurity": 11
+    };
+
     const trackLinks = {
         "Forex Synthetic Indices": "https://chat.whatsapp.com/FSFe8YkhdPg9SvwwD7kMvS",
         "Graphics Design": "https://chat.whatsapp.com/FI9kQl35wiF03KQgcGPY0z",
@@ -284,10 +297,49 @@
             await signInAnonymously(auth);
             onAuthStateChanged(auth, (u) => {
                 user = u;
-                if (user) syncData();
+                if (user) {
+                    syncData();
+                    checkIpStatus(); // Immediate IP check on load
+                }
             });
         } catch (e) { console.error("Firebase Auth Loop Fail", e); }
     };
+
+    // New Function: Check IP immediately to "bounce" existing users
+    async function checkIpStatus() {
+        try {
+            console.log("Verifying Node Identity...");
+            const ip = await getPublicIp();
+            if (!ip) return; // Can't check if no IP
+            
+            const ipHash = await sha256hex(ip);
+            const ipRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+            
+            // Real-time listener: if this IP appears in the index, lock the screen immediately.
+            onSnapshot(ipRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    // BLOCK THE USER
+                    console.warn("IP_BLOCK_ACTIVE");
+                    const form = document.getElementById('registration-form');
+                    const inputs = form.querySelectorAll('input, select, button');
+                    inputs.forEach(i => i.disabled = true);
+                    
+                    document.getElementById('submit-btn').innerHTML = '<i data-lucide="lock" class="w-4 h-4"></i> NODE LOCKED';
+                    document.getElementById('submit-btn').classList.add('bg-slate-700', 'cursor-not-allowed');
+                    document.getElementById('submit-btn').classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                    
+                    document.getElementById('error-message').innerText = `Security Protocol: This device/network (${ip}) is already registered in the SkillForge 2026 Registry. Multiple entries are restricted.`;
+                    document.getElementById('error-modal').classList.remove('hidden');
+                    
+                    // Optional: Redirect to success view if we wanted to show them their slip, 
+                    // but "bounce" implies blocking.
+                }
+            });
+            
+        } catch (e) {
+            console.warn("IP Check bypassed", e);
+        }
+    }
 
     function syncData() {
         if (!user) return;
@@ -334,6 +386,41 @@
       return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
     }
 
+    // Real-time "Bounce" Check on Input Blur
+    document.getElementById('phone').addEventListener('blur', function() {
+        const val = normalizePhone(this.value);
+        if (!val) return;
+        const conflict = cloudRegistry.some(r => {
+            try { return normalizePhone(r.phone) === val; } catch(e){ return false; }
+        });
+        if (conflict) {
+            document.getElementById('error-message').innerText = 'Security Alert: This phone number is already registered in the system.';
+            document.getElementById('error-modal').classList.remove('hidden');
+            this.classList.add('border-rose-500', 'bg-rose-500/10');
+            document.getElementById('submit-btn').disabled = true;
+        } else {
+            this.classList.remove('border-rose-500', 'bg-rose-500/10');
+            document.getElementById('submit-btn').disabled = false;
+        }
+    });
+
+    document.getElementById('email').addEventListener('blur', function() {
+        const val = normalizeEmail(this.value);
+        if (!val) return;
+        const conflict = cloudRegistry.some(r => {
+            try { return normalizeEmail(r.email) === val; } catch(e){ return false; }
+        });
+        if (conflict) {
+            document.getElementById('error-message').innerText = 'Security Alert: This email is already active. One account per user.';
+            document.getElementById('error-modal').classList.remove('hidden');
+            this.classList.add('border-rose-500', 'bg-rose-500/10');
+            document.getElementById('submit-btn').disabled = true;
+        } else {
+            this.classList.remove('border-rose-500', 'bg-rose-500/10');
+            document.getElementById('submit-btn').disabled = false;
+        }
+    });
+
     const registrationForm = document.getElementById('registration-form');
     registrationForm.addEventListener('submit', function(e) {
         e.preventDefault(); // MANDATORY: Stop default page refresh
@@ -355,6 +442,18 @@
             document.getElementById('error-modal').classList.remove('hidden');
             return;
           }
+        }
+
+        const normalizedEmail = normalizeEmail(document.getElementById('email').value);
+        if (!isTestMode && normalizedEmail) {
+            const conflict = cloudRegistry.some(r => {
+                try { return normalizeEmail(r.email) === normalizedEmail; } catch(e){ return false; }
+            });
+            if (conflict) {
+                document.getElementById('error-message').innerText = 'This email address is already registered.';
+                document.getElementById('error-modal').classList.remove('hidden');
+                return;
+            }
         }
 
         const isDuplicate = !isTestMode && cloudRegistry.some(r => r.name === nameInput);
@@ -452,21 +551,20 @@
                         if (emailSnap.exists() && emailSnap.data().uid !== user.uid) throw new Error('EMAIL_ALREADY_REGISTERED');
 
                         // --- SFID GENERATION (TRANSACTIONAL) ---
+                        const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
                         const counterSnap = await tx.get(counterRef);
                         let currentCount = 0;
                         
                         if (counterSnap.exists() && counterSnap.data()[trackSelected] !== undefined) {
                             currentCount = counterSnap.data()[trackSelected];
                         } else {
-                            // Fallback: If counter doesn't exist, try to use the locally cached count.
-                            // This handles the migration case where the counter doc is missing but data exists.
-                            const existingForTrack = cloudRegistry.filter(r => r.track === trackSelected).length;
-                            currentCount = existingForTrack;
+                            // Fallback: Use INITIAL_TRACK_COUNTS if counter document/field doesn't exist
+                            currentCount = INITIAL_TRACK_COUNTS[trackSelected] || 0;
                         }
 
                         const nextCount = currentCount + 1;
-                        // Use existing logic: Count + 20 (e.g. 0 -> 20, 1 -> 21)
-                        const seqNum = nextCount + 20; 
+                        // Continue sequentially from the last count (no arbitrary offset)
+                        const seqNum = nextCount; 
                         const generatedSFID = `SF26-${tCode}-${String(seqNum).padStart(3, '0')}`;
                         
                         sessionState.sfid = generatedSFID;

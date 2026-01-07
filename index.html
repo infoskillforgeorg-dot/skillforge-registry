@@ -262,6 +262,8 @@
             <button id="admin-revert-to-total" class="bg-rose-600/60 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert to Total</button>
             <input id="admin-revert-sfid" type="text" placeholder="SFID to revert" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-48" />
             <button id="admin-revert-by-sfid" class="bg-rose-700 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert by SFID</button>
+            <button id="admin-force-remove-sfid" class="bg-rose-700/90 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Force Remove SFID</button>
+            <button id="admin-force-clean-synthetic" class="bg-rose-800 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Force Clean Synthetic</button>
           </div>
         </div>
         <div id="admin-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
@@ -1121,6 +1123,14 @@
         if (!/^SF26-[A-Z]{3}-\d{3}$/.test(sfid)) return;
         await revertBySfid(sfid);
     });
+    document.getElementById('admin-force-remove-sfid').addEventListener('click', async () => {
+        const sfid = (document.getElementById('admin-revert-sfid').value||'').trim().toUpperCase();
+        if (!/^SF26-[A-Z]{3}-\d{3}$/.test(sfid)) return;
+        await forceRemoveBySfid(sfid);
+    });
+    document.getElementById('admin-force-clean-synthetic').addEventListener('click', async () => {
+        await forceCleanSynthetic();
+    });
     if (window.location.hash === '#admin') {
         showAdmin();
     }
@@ -1300,6 +1310,77 @@
             renderAdmin();
         } catch (e) {
             document.getElementById('error-message').innerText = 'Revert by SFID failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    }
+    async function forceRemoveBySfid(sfid) {
+        try {
+            const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+            const q = query(regsCol, where('sfid','==', sfid));
+            const snap = await getDocs(q);
+            if (snap.empty) return;
+            const ref = snap.docs[0].ref;
+            const data = snap.docs[0].data();
+            const track = data.track || '';
+            const num = parseInt((String(sfid).split('-').pop()||'0'),10) || 0;
+            const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
+            await runTransaction(db, async (tx) => {
+                const cSnap = await tx.get(counterRef);
+                const cData = cSnap.exists() ? cSnap.data() : {};
+                const availMap = cData.tracks_available || {};
+                const pool = Array.isArray(availMap[track]) ? [...availMap[track]] : [];
+                if (num>0 && !pool.includes(num)) {
+                    pool.push(num);
+                    pool.sort((a,b)=>a-b);
+                }
+                availMap[track] = pool;
+                tx.update(counterRef, { tracks_available: availMap });
+                tx.delete(ref);
+            });
+            try {
+                const ipCol = collection(db, 'artifacts', appId, 'public', 'data', 'ip_index');
+                const phoneCol = collection(db, 'artifacts', appId, 'public', 'data', 'phone_index');
+                const emailCol = collection(db, 'artifacts', appId, 'public', 'data', 'email_index');
+                const qIp = query(ipCol, where('sfid','==', sfid));
+                const qPh = query(phoneCol, where('sfid','==', sfid));
+                const qEm = query(emailCol, where('sfid','==', sfid));
+                const ipDocs = await getDocs(qIp);
+                const phDocs = await getDocs(qPh);
+                const emDocs = await getDocs(qEm);
+                for (const d of ipDocs.docs) { await deleteDoc(d.ref); }
+                for (const d of phDocs.docs) { await deleteDoc(d.ref); }
+                for (const d of emDocs.docs) { await deleteDoc(d.ref); }
+            } catch(_) {}
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                type: 'force_delete',
+                sfid,
+                track,
+                at: serverTimestamp(),
+                acted_by: (auth.currentUser||{}).uid || 'admin'
+            }).catch(()=>{});
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Force remove failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    }
+    async function forceCleanSynthetic() {
+        try {
+            const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+            const q = query(regsCol, where('track','==','Forex Synthetic Indices'));
+            const snap = await getDocs(q);
+            for (const d of snap.docs) {
+                const rec = d.data();
+                const sfid = String(rec.sfid||'');
+                const name = (rec.name||'').trim().toUpperCase();
+                const num = parseInt((sfid.split('-').pop()||'0'),10) || 0;
+                if (num>18 || (name === 'CHISOM EKWUEME' && sfid !== 'SF26-FXS-008')) {
+                    await forceRemoveBySfid(sfid);
+                }
+            }
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Force clean failed. Please retry.';
             document.getElementById('error-modal').classList.remove('hidden');
         }
     }

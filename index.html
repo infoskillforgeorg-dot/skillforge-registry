@@ -169,6 +169,9 @@
               <div id="corr-email" class="font-bold">—</div>
             </div>
           </div>
+          <div class="mt-4 flex items-center gap-3">
+            <input id="correction-new-name" type="text" placeholder="Enter new name (optional)" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
+          </div>
         </div>
       </div>
 
@@ -279,6 +282,10 @@
             <h3 id="correction-title" class="text-xl font-bold mb-4">Correct Track</h3>
             <input type="hidden" id="correction-id" />
             <input type="hidden" id="correction-old-sfid" />
+            <div class="mb-4">
+              <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">New Name</label>
+              <input id="correction-name" type="text" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 text-sm" />
+            </div>
             <div class="mb-4">
               <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">New Track</label>
               <select id="correction-track" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 text-sm">
@@ -1106,6 +1113,8 @@
         document.getElementById('correction-id').value = id;
         document.getElementById('correction-old-sfid').value = rec.sfid || '';
         document.getElementById('correction-track').value = rec.track || '';
+        const nameInput = document.getElementById('correction-name');
+        if (nameInput) nameInput.value = rec.name || '';
         document.getElementById('correction-title').innerText = `Correct: ${rec.name||''} (${rec.sfid||''})`;
         document.getElementById('correction-modal').classList.remove('hidden');
     };
@@ -1217,6 +1226,8 @@
         const id = document.getElementById('correction-id').value;
         const newTrack = document.getElementById('correction-track').value;
         const oldSfid = document.getElementById('correction-old-sfid').value;
+        const newNameRaw = (document.getElementById('correction-name').value || '').trim();
+        const newName = newNameRaw ? newNameRaw.toUpperCase() : '';
         if (!id || !newTrack) return;
         try {
             const regRef = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', id);
@@ -1228,22 +1239,41 @@
             const tCode = trackCodes[newTrack];
             const newSFID = await runTransaction(db, async (tx) => {
                 const counterSnap = await tx.get(counterRef);
-                let currentCount = 0;
-                if (counterSnap.exists() && counterSnap.data()[newTrack] !== undefined) {
-                    currentCount = counterSnap.data()[newTrack];
+                const data = counterSnap.exists() ? counterSnap.data() : {};
+                const maxMap = data.tracks_max || {};
+                const availMap = data.tracks_available || {};
+                const poolNew = Array.isArray(availMap[newTrack]) ? [...availMap[newTrack]] : [];
+                poolNew.sort((a,b)=>a-b);
+                let seqNumNew;
+                if (poolNew.length > 0) {
+                    seqNumNew = poolNew.shift();
+                    availMap[newTrack] = poolNew;
                 } else {
-                    currentCount = INITIAL_TRACK_COUNTS[newTrack] || 0;
+                    const curMaxNew = typeof maxMap[newTrack] === 'number' ? maxMap[newTrack] : (data[newTrack] ?? INITIAL_TRACK_COUNTS[newTrack] ?? 0);
+                    seqNumNew = curMaxNew + 1;
+                    maxMap[newTrack] = seqNumNew;
                 }
-                const nextCount = currentCount + 1;
-                const generatedSFID = `SF26-${tCode}-${String(nextCount).padStart(3,'0')}`;
-                tx.update(regRef, { track: newTrack, sfid: generatedSFID, corrected_once: true, updated_at: serverTimestamp() });
-                tx.set(counterRef, { [newTrack]: nextCount }, { merge: true });
+                const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
+                const freedNum = parseInt((oldSfid.split('-').pop()||'0'),10) || 0;
+                const poolOld = Array.isArray(availMap[rec.track]) ? [...availMap[rec.track]] : [];
+                if (freedNum>0 && !poolOld.includes(freedNum)) {
+                    poolOld.push(freedNum);
+                    poolOld.sort((a,b)=>a-b);
+                }
+                availMap[rec.track] = poolOld;
+                tx.update(regRef, { track: newTrack, sfid: generatedSFID, name: (newName || rec.name || ''), corrected_once: true, updated_at: serverTimestamp() });
+                tx.set(counterRef, {
+                    tracks_max: { ...(data.tracks_max||{}), [newTrack]: maxMap[newTrack] ?? seqNumNew },
+                    tracks_available: { ...(data.tracks_available||{}), [newTrack]: availMap[newTrack] ?? [], [rec.track]: availMap[rec.track] ?? [] }
+                }, { merge: true });
                 return generatedSFID;
             });
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
                 type: 'correction',
                 registration_id: id,
-                name: rec.name || '',
+                name: (newName || rec.name || ''),
+                old_name: rec.name || '',
+                new_name: (newName || rec.name || ''),
                 old_sfid: oldSfid,
                 old_track: rec.track || '',
                 new_sfid: newSFID,
@@ -1313,6 +1343,8 @@
     document.getElementById('correction-search').addEventListener('input', renderCorrection);
     document.getElementById('correction-apply').addEventListener('click', async () => {
         const newTrack = document.getElementById('correction-new-track').value;
+        const newNameRaw = (document.getElementById('correction-new-name').value || '').trim();
+        const newName = newNameRaw ? newNameRaw.toUpperCase() : '';
         if (!correctionSelected || !newTrack) return;
         try {
             const oldSFID = correctionSelected.sfid || '';
@@ -1342,7 +1374,7 @@
                     const regSnap = await tx.get(regRef);
                     const regData = regSnap.exists() ? regSnap.data() : {};
                     if (regData.corrected_once) throw new Error('ALREADY_CORRECTED');
-                    tx.update(regRef, { track: newTrack, sfid: generatedSFID, corrected_once: true, updated_at: serverTimestamp() });
+                    tx.update(regRef, { track: newTrack, sfid: generatedSFID, name: (newName || regData.name || ''), corrected_once: true, updated_at: serverTimestamp() });
                     const freedNum = parseInt((oldSFID.split('-').pop()||'0'),10) || 0;
                     const poolOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
                     if (freedNum>0 && !poolOld.includes(freedNum)) {
@@ -1383,7 +1415,9 @@
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
                     type: 'correction',
                     registration_id: correctionSelected.id,
-                    name: correctionSelected.name || '',
+                    name: (newName || correctionSelected.name || ''),
+                    old_name: correctionSelected.name || '',
+                    new_name: (newName || correctionSelected.name || ''),
                     old_sfid: oldSFID,
                     old_track: oldTrack || '',
                     new_sfid: finalSFID,
@@ -1412,7 +1446,7 @@
                     const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
                     const newRef = doc(regsCol);
                     tx.set(newRef, {
-                        name: correctionSelected.name,
+                        name: (newName || correctionSelected.name || ''),
                         track: newTrack,
                         challenge: 'No',
                         phone: correctionSelected.phone||'',
@@ -1448,7 +1482,7 @@
                 }
             }
             sessionState = {
-                name: correctionSelected.name,
+                name: (newName || correctionSelected.name || ''),
                 track: newTrack,
                 challenge: 'No',
                 phone: correctionSelected.phone||'',

@@ -244,7 +244,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
     // Firebase Config provided by User
     const firebaseConfig = {
@@ -259,6 +259,7 @@
 
     const WEB3_KEY = "dec36845-d08f-486c-a201-9c549445dcbd";
     const trackCodes = { "Forex Synthetic Indices": "FXS", "Graphics Design": "GRD", "Stock Market Trading": "STK", "Web Design & Development": "WDD", "Forex Currency Pairs": "FXC", "Discord Design & Development": "DDC", "Photography & Editing": "PHO", "Cybersecurity": "CYB" };
+    const SYSTEM_LOCKDOWN = true;
     
     // Initial counts from previous registry (to continue numbering)
     const INITIAL_TRACK_COUNTS = {
@@ -299,7 +300,7 @@
                 user = u;
                 if (user) {
                     syncData();
-                    checkIpStatus(); // Immediate IP check on load
+                    if (typeof BOUNCE_ON_LOAD !== 'undefined' && BOUNCE_ON_LOAD) checkIpStatus();
                 }
             });
         } catch (e) { console.error("Firebase Auth Loop Fail", e); }
@@ -365,6 +366,15 @@
         const btn = document.getElementById('submit-btn');
         btn.disabled = true;
         btn.classList.add('opacity-50', 'cursor-not-allowed');
+        if (SYSTEM_LOCKDOWN) {
+            const form = document.getElementById('registration-form');
+            const inputs = form.querySelectorAll('input, select, button');
+            inputs.forEach(i => i.disabled = true);
+            btn.innerText = 'SYSTEM SHUT DOWN';
+            btn.classList.add('bg-slate-700');
+            document.getElementById('error-message').innerText = 'System is shut down. Please try later.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
     });
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
@@ -436,7 +446,7 @@
     });
 
     const registrationForm = document.getElementById('registration-form');
-    registrationForm.addEventListener('submit', function(e) {
+    registrationForm.addEventListener('submit', async function(e) {
         e.preventDefault(); // MANDATORY: Stop default page refresh
 
         // read and normalize phone immediately for pre-check
@@ -475,6 +485,22 @@
             document.getElementById('error-message').innerText = `Identity "${nameInput}" is already registered.`;
             document.getElementById('error-modal').classList.remove('hidden');
             return;
+        }
+
+        if (!isTestMode) {
+            try {
+                const ip = await getPublicIp();
+                if (ip) {
+                    const ipHash = await sha256hex(ip);
+                    const ipRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+                    const ipDoc = await getDoc(ipRef);
+                    if (ipDoc.exists()) {
+                        document.getElementById('error-message').innerText = 'This device/network is already registered.';
+                        document.getElementById('error-modal').classList.remove('hidden');
+                        return;
+                    }
+                }
+            } catch (_) {}
         }
 
         const btn = document.getElementById('submit-btn');
@@ -527,6 +553,11 @@
         lucide.createIcons();
 
         try {
+            if (SYSTEM_LOCKDOWN) {
+                document.getElementById('error-message').innerText = 'System is shut down. Please try later.';
+                document.getElementById('error-modal').classList.remove('hidden');
+                return;
+            }
             if (!user) {
                 // Try one last silent sign-in attempt
                 try {

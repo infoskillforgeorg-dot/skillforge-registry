@@ -126,6 +126,52 @@
             </form>
         </div>
       </div>
+      
+      <div id="correction-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] p-8 text-left zoom-in">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-black tracking-tight">Correction Mechanic</h2>
+          <div class="flex items-center gap-3">
+            <input id="correction-search" type="text" placeholder="Search SFID, name, phone, email" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
+            <select id="correction-new-track" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm">
+              <option value="">Select new track</option>
+              <option value="Forex Synthetic Indices">Forex Synthetic Indices</option>
+              <option value="Graphics Design">Graphics Design</option>
+              <option value="Stock Market Trading">Stock Market Trading</option>
+              <option value="Web Design & Development">Web Design & Development</option>
+              <option value="Forex Currency Pairs">Forex Currency Pairs</option>
+              <option value="Discord Design & Development">Discord Design & Development</option>
+              <option value="Photography & Editing">Photography & Editing</option>
+              <option value="Cybersecurity">Cybersecurity</option>
+            </select>
+            <button id="correction-apply" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase" disabled>Apply Correction</button>
+          </div>
+        </div>
+        <div class="overflow-auto border border-white/10 rounded-xl">
+          <table class="w-full text-sm">
+            <thead class="bg-white/5">
+              <tr>
+                <th class="p-2 text-left">SFID</th>
+                <th class="p-2 text-left">Name</th>
+                <th class="p-2 text-left">Track</th>
+                <th class="p-2 text-left">Phone</th>
+                <th class="p-2 text-left">Email</th>
+                <th class="p-2 text-left">Select</th>
+              </tr>
+            </thead>
+            <tbody id="correction-table" class="divide-y divide-white/5"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="mode-modal" class="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+        <div class="bg-[#1a1f29] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl text-center">
+          <h3 class="text-xl font-bold mb-4">Choose Operation</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button onclick="selectMode('register')" class="bg-blue-600 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest">New Enrollment</button>
+            <button onclick="selectMode('correct')" class="bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-xs tracking-widest">Correction</button>
+          </div>
+        </div>
+      </div>
 
       <div id="onboarding-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] overflow-hidden shadow-2xl zoom-in">
         <div class="p-8 md:p-12 text-center">
@@ -211,10 +257,35 @@
                 <th class="p-2 text-left">Phone</th>
                 <th class="p-2 text-left">Email</th>
                 <th class="p-2 text-left">Date</th>
+                <th class="p-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody id="admin-table" class="divide-y divide-white/5"></tbody>
           </table>
+        </div>
+        <div id="correction-modal" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <div class="bg-[#1a1f29] border border-blue-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl">
+            <h3 id="correction-title" class="text-xl font-bold mb-4">Correct Track</h3>
+            <input type="hidden" id="correction-id" />
+            <input type="hidden" id="correction-old-sfid" />
+            <div class="mb-4">
+              <label class="text-[10px] font-black text-slate-500 uppercase mb-2 block tracking-widest">New Track</label>
+              <select id="correction-track" class="w-full bg-white/5 border border-white/10 rounded-xl p-3.5 text-sm">
+                <option value="Forex Synthetic Indices">Forex Synthetic Indices</option>
+                <option value="Graphics Design">Graphics Design</option>
+                <option value="Stock Market Trading">Stock Market Trading</option>
+                <option value="Web Design & Development">Web Design & Development</option>
+                <option value="Forex Currency Pairs">Forex Currency Pairs</option>
+                <option value="Discord Design & Development">Discord Design & Development</option>
+                <option value="Photography & Editing">Photography & Editing</option>
+                <option value="Cybersecurity">Cybersecurity</option>
+              </select>
+            </div>
+            <div class="flex gap-3">
+              <button id="correction-confirm" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest">Apply</button>
+              <button type="button" id="correction-cancel" class="flex-1 bg-slate-700 text-white py-3 rounded-xl font-bold uppercase text-[10px] tracking-widest">Cancel</button>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -281,7 +352,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp, getDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp, getDoc, query, where, getDocs, updateDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
     // Firebase Config provided by User
     const firebaseConfig = {
@@ -441,6 +512,7 @@
     let user = null;
     let cloudRegistry = [];
     let sessionState = {};
+    let correctionSelected = null;
 
     const startApp = async () => {
         try {
@@ -495,7 +567,7 @@
         if (!user) return;
         const q = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
         onSnapshot(q, (snap) => {
-            cloudRegistry = snap.docs.map(doc => doc.data());
+            cloudRegistry = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             const total = cloudRegistry.length + 110;
             document.getElementById('live-counter').innerText = `GLOBAL_NODES: ${total} ACTIVE`;
             
@@ -527,9 +599,22 @@
             document.getElementById('error-message').innerText = 'System is shut down. Please try later.';
             document.getElementById('error-modal').classList.remove('hidden');
         }
+        document.getElementById('mode-modal').classList.remove('hidden');
     });
 
     window.closeError = () => document.getElementById('error-modal').classList.add('hidden');
+    window.selectMode = (mode) => {
+        document.getElementById('mode-modal').classList.add('hidden');
+        if (mode === 'register') {
+            document.getElementById('registration-view').classList.remove('hidden');
+            document.getElementById('correction-view').classList.add('hidden');
+        } else {
+            document.getElementById('registration-view').classList.add('hidden');
+            document.getElementById('correction-view').classList.remove('hidden');
+            renderCorrection();
+        }
+        window.scrollTo(0, 0);
+    };
 
     // Normalize phone/email helpers
     function normalizePhone(raw) {
@@ -762,7 +847,7 @@
                 const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
                 const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
                 
-                // Use a consistent reference for the counter
+                // Use a consistent reference for the counter and pool
                 const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
                 const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
                 const newRegRef = doc(regsCol);
@@ -783,17 +868,20 @@
 
                     // 2. SFID Generation
                     const counterSnap = await tx.get(counterRef);
-                    let currentCount = 0;
-                    
-                    if (counterSnap.exists() && counterSnap.data()[trackSelected] !== undefined) {
-                        currentCount = counterSnap.data()[trackSelected];
+                    const data = counterSnap.exists() ? counterSnap.data() : {};
+                    const maxMap = data.tracks_max || {};
+                    const availMap = data.tracks_available || {};
+                    const curMax = typeof maxMap[trackSelected] === 'number' ? maxMap[trackSelected] : (data[trackSelected] ?? INITIAL_TRACK_COUNTS[trackSelected] ?? 0);
+                    const pool = Array.isArray(availMap[trackSelected]) ? [...availMap[trackSelected]] : [];
+                    pool.sort((a,b)=>a-b);
+                    let seqNum;
+                    if (pool.length > 0) {
+                        seqNum = pool.shift();
+                        availMap[trackSelected] = pool;
                     } else {
-                        // Fallback: Use INITIAL_TRACK_COUNTS
-                        currentCount = INITIAL_TRACK_COUNTS[trackSelected] || 0;
+                        seqNum = curMax + 1;
+                        maxMap[trackSelected] = seqNum;
                     }
-
-                    const nextCount = currentCount + 1;
-                    const seqNum = nextCount; 
                     const generatedSFID = `SF26-${tCode}-${String(seqNum).padStart(3, '0')}`;
 
                     // 3. Atomic Writes
@@ -832,9 +920,11 @@
                         created_at: serverTimestamp()
                     });
 
-                    // Update counter
+                    // Update counter and pool
                     tx.set(counterRef, {
-                        [trackSelected]: nextCount
+                        [trackSelected]: seqNum,
+                        tracks_max: { ...(data.tracks_max||{}), [trackSelected]: maxMap[trackSelected] ?? seqNum },
+                        tracks_available: { ...(data.tracks_available||{}), [trackSelected]: availMap[trackSelected] ?? [] }
                     }, { merge: true });
 
                     return generatedSFID;
@@ -908,6 +998,14 @@
         document.getElementById('admin-view').classList.remove('hidden');
         renderAdmin();
     }
+    function showCorrection() {
+        document.getElementById('registration-view').classList.add('hidden');
+        document.getElementById('onboarding-view').classList.add('hidden');
+        document.getElementById('success-view').classList.add('hidden');
+        document.getElementById('admin-view').classList.add('hidden');
+        document.getElementById('correction-view').classList.remove('hidden');
+        renderCorrection();
+    }
     function renderAdmin() {
         const trackFilter = document.getElementById('admin-filter-track').value || '';
         const query = (document.getElementById('admin-search').value || '').trim().toLowerCase();
@@ -928,7 +1026,8 @@
         statsEl.innerHTML = statHtml;
         const tbody = document.getElementById('admin-table');
         tbody.innerHTML = rows.map(r => {
-            return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${formatDate(r.created_at)||''}</td></tr>`;
+            const actionable = r.id ? `<button class="text-[10px] px-2 py-1 rounded bg-blue-600 text-white font-black uppercase" onclick="openCorrection('${r.id}')">Correct</button>` : `<button class="text-[10px] px-2 py-1 rounded bg-slate-700 text-white font-black uppercase cursor-not-allowed" disabled>Offline</button>`;
+            return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${formatDate(r.created_at)||''}</td><td class="p-2">${actionable}</td></tr>`;
         }).join('');
     }
     function exportCSV() {
@@ -962,6 +1061,249 @@
     if (window.location.hash === '#admin') {
         showAdmin();
     }
+    if (window.location.hash === '#correct') {
+        showCorrection();
+    }
+
+    window.openCorrection = (id) => {
+        const rec = cloudRegistry.find(r => r.id === id);
+        if (!rec) return;
+        document.getElementById('correction-id').value = id;
+        document.getElementById('correction-old-sfid').value = rec.sfid || '';
+        document.getElementById('correction-track').value = rec.track || '';
+        document.getElementById('correction-title').innerText = `Correct: ${rec.name||''} (${rec.sfid||''})`;
+        document.getElementById('correction-modal').classList.remove('hidden');
+    };
+    document.getElementById('correction-cancel').addEventListener('click', () => {
+        document.getElementById('correction-modal').classList.add('hidden');
+    });
+    document.getElementById('correction-confirm').addEventListener('click', async () => {
+        const id = document.getElementById('correction-id').value;
+        const newTrack = document.getElementById('correction-track').value;
+        const oldSfid = document.getElementById('correction-old-sfid').value;
+        if (!id || !newTrack) return;
+        try {
+            const regRef = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', id);
+            const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
+            const recSnap = await getDoc(regRef);
+            if (!recSnap.exists()) throw new Error('NOT_FOUND');
+            const rec = recSnap.data();
+            const tCode = trackCodes[newTrack];
+            const newSFID = await runTransaction(db, async (tx) => {
+                const counterSnap = await tx.get(counterRef);
+                let currentCount = 0;
+                if (counterSnap.exists() && counterSnap.data()[newTrack] !== undefined) {
+                    currentCount = counterSnap.data()[newTrack];
+                } else {
+                    currentCount = INITIAL_TRACK_COUNTS[newTrack] || 0;
+                }
+                const nextCount = currentCount + 1;
+                const generatedSFID = `SF26-${tCode}-${String(nextCount).padStart(3,'0')}`;
+                tx.update(regRef, { track: newTrack, sfid: generatedSFID, updated_at: serverTimestamp() });
+                tx.set(counterRef, { [newTrack]: nextCount }, { merge: true });
+                return generatedSFID;
+            });
+            const phoneKey = rec.phone_normalized || '';
+            const emailKey = rec.email_normalized || '';
+            if (phoneKey) {
+                const phoneRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', phoneKey);
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), { type:'phone_correction', id, old: oldSfid, new: newSFID, at: serverTimestamp() }).catch(()=>{});
+                await runTransaction(db, async (tx) => {
+                    const ps = await tx.get(phoneRef);
+                    if (ps.exists()) tx.update(phoneRef, { sfid: newSFID });
+                });
+            }
+            if (emailKey) {
+                const emailRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', emailKey);
+                await runTransaction(db, async (tx) => {
+                    const es = await tx.get(emailRef);
+                    if (es.exists()) tx.update(emailRef, { sfid: newSFID });
+                });
+            }
+            const ipIdxCol = collection(db, 'artifacts', appId, 'public', 'data', 'ip_index');
+            try {
+                const qIp = query(ipIdxCol, where('sfid','==', oldSfid));
+                const ipDocs = await getDocs(qIp);
+                for (const d of ipDocs.docs) {
+                    await updateDoc(d.ref, { sfid: newSFID });
+                }
+            } catch(_) {}
+            document.getElementById('correction-modal').classList.add('hidden');
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Correction failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    });
+
+    function renderCorrection() {
+        const queryStr = (document.getElementById('correction-search').value || '').trim().toLowerCase();
+        const merged = PREVIOUS_REGISTRY.concat(cloudRegistry);
+        const rows = merged.filter(r => {
+            const blob = `${r.sfid||''} ${r.name||''} ${r.track||''} ${r.phone||''} ${r.email||''}`.toLowerCase();
+            return !queryStr || blob.includes(queryStr);
+        });
+        const tbody = document.getElementById('correction-table');
+        tbody.innerHTML = rows.map(r => {
+            const selectable = `<button class="text-[10px] px-2 py-1 rounded ${r.id?'bg-blue-600':'bg-indigo-600'} text-white font-black uppercase" onclick="selectCorrection('${r.id||''}','${encodeURIComponent(r.sfid||'')}','${encodeURIComponent(r.name||'')}','${encodeURIComponent(r.track||'')}','${encodeURIComponent(r.phone||'')}','${encodeURIComponent(r.email||'')}')">Select</button>`;
+            return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${selectable}</td></tr>`;
+        }).join('');
+    }
+    document.getElementById('correction-search').addEventListener('input', renderCorrection);
+    window.selectCorrection = (id, sfidEnc, nameEnc, trackEnc, phoneEnc, emailEnc) => {
+        const sfid = decodeURIComponent(sfidEnc);
+        const name = decodeURIComponent(nameEnc);
+        const track = decodeURIComponent(trackEnc);
+        const phone = decodeURIComponent(phoneEnc);
+        const email = decodeURIComponent(emailEnc);
+        correctionSelected = { id, sfid, name, track, phone, email };
+        document.getElementById('correction-apply').disabled = false;
+    };
+    document.getElementById('correction-apply').addEventListener('click', async () => {
+        const newTrack = document.getElementById('correction-new-track').value;
+        if (!correctionSelected || !newTrack) return;
+        try {
+            const oldSFID = correctionSelected.sfid || '';
+            const oldTrack = correctionSelected.track || '';
+            const tCode = trackCodes[newTrack];
+            const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
+            let finalSFID = '';
+            if (correctionSelected.id) {
+                const regRef = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', correctionSelected.id);
+                finalSFID = await runTransaction(db, async (tx) => {
+                    const counterSnap = await tx.get(counterRef);
+                    const data = counterSnap.exists() ? counterSnap.data() : {};
+                    const maxMap = data.tracks_max || {};
+                    const availMap = data.tracks_available || {};
+                    const poolNew = Array.isArray(availMap[newTrack]) ? [...availMap[newTrack]] : [];
+                    poolNew.sort((a,b)=>a-b);
+                    let seqNumNew;
+                    if (poolNew.length > 0) {
+                        seqNumNew = poolNew.shift();
+                        availMap[newTrack] = poolNew;
+                    } else {
+                        const curMaxNew = typeof maxMap[newTrack] === 'number' ? maxMap[newTrack] : (data[newTrack] ?? INITIAL_TRACK_COUNTS[newTrack] ?? 0);
+                        seqNumNew = curMaxNew + 1;
+                        maxMap[newTrack] = seqNumNew;
+                    }
+                    const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
+                    tx.update(regRef, { track: newTrack, sfid: generatedSFID, updated_at: serverTimestamp() });
+                    const freedNum = parseInt((oldSFID.split('-').pop()||'0'),10) || 0;
+                    const poolOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
+                    if (freedNum>0 && !poolOld.includes(freedNum)) {
+                        poolOld.push(freedNum);
+                        poolOld.sort((a,b)=>a-b);
+                    }
+                    availMap[oldTrack] = poolOld;
+                    tx.set(counterRef, {
+                        tracks_max: { ...(data.tracks_max||{}), [newTrack]: maxMap[newTrack] ?? seqNumNew },
+                        tracks_available: { ...(data.tracks_available||{}), [newTrack]: availMap[newTrack] ?? [], [oldTrack]: availMap[oldTrack] ?? [] }
+                    }, { merge: true });
+                    return generatedSFID;
+                });
+                const phoneKey = normalizePhone(correctionSelected.phone||'');
+                const emailKey = normalizeEmail(correctionSelected.email||'');
+                if (phoneKey) {
+                    const phoneRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', phoneKey);
+                    await runTransaction(db, async (tx) => {
+                        const ps = await tx.get(phoneRef);
+                        if (ps.exists()) tx.update(phoneRef, { sfid: finalSFID });
+                    });
+                }
+                if (emailKey) {
+                    const emailRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', emailKey);
+                    await runTransaction(db, async (tx) => {
+                        const es = await tx.get(emailRef);
+                        if (es.exists()) tx.update(emailRef, { sfid: finalSFID });
+                    });
+                }
+                const ipIdxCol = collection(db, 'artifacts', appId, 'public', 'data', 'ip_index');
+                try {
+                    const qIp = query(ipIdxCol, where('sfid','==', oldSFID));
+                    const ipDocs = await getDocs(qIp);
+                    for (const d of ipDocs.docs) {
+                        await updateDoc(d.ref, { sfid: finalSFID });
+                    }
+                } catch(_) {}
+            } else {
+                const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+                finalSFID = await runTransaction(db, async (tx) => {
+                    const counterSnap = await tx.get(counterRef);
+                    const data = counterSnap.exists() ? counterSnap.data() : {};
+                    const maxMap = data.tracks_max || {};
+                    const availMap = data.tracks_available || {};
+                    const poolNew = Array.isArray(availMap[newTrack]) ? [...availMap[newTrack]] : [];
+                    poolNew.sort((a,b)=>a-b);
+                    let seqNumNew;
+                    if (poolNew.length > 0) {
+                        seqNumNew = poolNew.shift();
+                        availMap[newTrack] = poolNew;
+                    } else {
+                        const curMaxNew = typeof maxMap[newTrack] === 'number' ? maxMap[newTrack] : (data[newTrack] ?? INITIAL_TRACK_COUNTS[newTrack] ?? 0);
+                        seqNumNew = curMaxNew + 1;
+                        maxMap[newTrack] = seqNumNew;
+                    }
+                    const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
+                    const newRef = doc(regsCol);
+                    tx.set(newRef, {
+                        name: correctionSelected.name,
+                        track: newTrack,
+                        challenge: 'No',
+                        phone: correctionSelected.phone||'',
+                        phone_normalized: normalizePhone(correctionSelected.phone||''),
+                        email: correctionSelected.email||'',
+                        email_normalized: normalizeEmail(correctionSelected.email||''),
+                        sfid: generatedSFID,
+                        timestamp: new Date().toISOString(),
+                        created_by: (auth.currentUser||{}).uid || 'admin',
+                        created_at: serverTimestamp()
+                    });
+                    const freedNum = parseInt((oldSFID.split('-').pop()||'0'),10) || 0;
+                    const poolOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
+                    if (freedNum>0 && !poolOld.includes(freedNum)) {
+                        poolOld.push(freedNum);
+                        poolOld.sort((a,b)=>a-b);
+                    }
+                    availMap[oldTrack] = poolOld;
+                    tx.set(counterRef, {
+                        tracks_max: { ...(data.tracks_max||{}), [newTrack]: maxMap[newTrack] ?? seqNumNew },
+                        tracks_available: { ...(data.tracks_available||{}), [newTrack]: availMap[newTrack] ?? [], [oldTrack]: availMap[oldTrack] ?? [] }
+                    }, { merge: true });
+                    return generatedSFID;
+                });
+                const phoneKey = normalizePhone(correctionSelected.phone||'');
+                const emailKey = normalizeEmail(correctionSelected.email||'');
+                if (phoneKey) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', phoneKey), { sfid: finalSFID }).catch(()=>{});
+                }
+                if (emailKey) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'email_index', emailKey), { sfid: finalSFID }).catch(()=>{});
+                }
+            }
+            sessionState = {
+                name: correctionSelected.name,
+                track: newTrack,
+                challenge: 'No',
+                phone: correctionSelected.phone||'',
+                phone_normalized: normalizePhone(correctionSelected.phone||''),
+                email: correctionSelected.email||'',
+                email_normalized: normalizeEmail(correctionSelected.email||''),
+                sfid: finalSFID,
+                timestamp: new Date().toISOString(),
+                is_test: false
+            };
+            try {
+                window.open('https://discord.gg/JyegEXMXx','_blank');
+                window.open('https://t.me/skillforgeorg','_blank');
+                const wl = trackLinks[newTrack];
+                if (wl) window.open(wl,'_blank');
+            } catch(_) {}
+            showSuccess();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Correction failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    });
   </script>
 </body>
 </html>

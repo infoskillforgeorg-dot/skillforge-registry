@@ -258,6 +258,10 @@
             <button id="admin-export" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase">Export CSV</button>
             <button id="admin-revert-latest" class="bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert Latest</button>
             <button id="admin-revert-latest-track" class="bg-rose-600/80 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert Latest in Track</button>
+            <input id="admin-target-total" type="number" placeholder="Target Total" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-32" />
+            <button id="admin-revert-to-total" class="bg-rose-600/60 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert to Total</button>
+            <input id="admin-revert-sfid" type="text" placeholder="SFID to revert" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-48" />
+            <button id="admin-revert-by-sfid" class="bg-rose-700 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert by SFID</button>
           </div>
         </div>
         <div id="admin-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
@@ -371,7 +375,7 @@
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp, getDoc, query, where, getDocs, updateDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+    import { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, serverTimestamp, getDoc, query, where, getDocs, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
     // Firebase Config provided by User
     const firebaseConfig = {
@@ -1107,6 +1111,16 @@
     });
     document.getElementById('admin-revert-latest').addEventListener('click', () => revertLatestCorrection());
     document.getElementById('admin-revert-latest-track').addEventListener('click', () => revertLatestInTrack());
+    document.getElementById('admin-revert-to-total').addEventListener('click', async () => {
+        const target = parseInt(document.getElementById('admin-target-total').value||'0',10) || 0;
+        if (!target) return;
+        await revertToTotal(target);
+    });
+    document.getElementById('admin-revert-by-sfid').addEventListener('click', async () => {
+        const sfid = (document.getElementById('admin-revert-sfid').value||'').trim().toUpperCase();
+        if (!/^SF26-[A-Z]{3}-\d{3}$/.test(sfid)) return;
+        await revertBySfid(sfid);
+    });
     if (window.location.hash === '#admin') {
         showAdmin();
     }
@@ -1132,12 +1146,19 @@
             if (!logSnap.exists()) return;
             const l = logSnap.data();
             if (l.type !== 'correction') return;
-            const regRef = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', l.registration_id);
+            let regRef = l.registration_id ? doc(db, 'artifacts', appId, 'public', 'data', 'registrations', l.registration_id) : null;
+            if (!regRef) {
+                const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+                const q = query(regsCol, where('sfid','==', l.new_sfid));
+                const snap = await getDocs(q);
+                const found = snap.docs[0];
+                if (!found) return;
+                regRef = found.ref;
+            }
             const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
             const finalSFID = await runTransaction(db, async (tx) => {
                 const regSnap = await tx.get(regRef);
                 if (!regSnap.exists()) throw new Error('NOT_FOUND');
-                const reg = regSnap.data();
                 const counterSnap = await tx.get(counterRef);
                 const data = counterSnap.exists() ? counterSnap.data() : {};
                 const maxMap = data.tracks_max || {};
@@ -1148,36 +1169,43 @@
                 const newNum = parseInt((String(l.new_sfid||'').split('-').pop()||'0'),10) || 0;
                 const availOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
                 const availNew = Array.isArray(availMap[newTrack]) ? [...availMap[newTrack]] : [];
-                let useOldNum = false;
-                const idxOld = availOld.indexOf(oldNum);
-                if (idxOld !== -1) {
-                    availOld.splice(idxOld,1);
-                    useOldNum = true;
-                } else {
-                    useOldNum = false;
-                }
                 if (!availNew.includes(newNum)) {
                     availNew.push(newNum);
                     availNew.sort((a,b)=>a-b);
                 }
-                availMap[oldTrack] = availOld;
-                availMap[newTrack] = availNew;
-                let finalNum = oldNum;
-                if (!useOldNum) {
-                    if (availOld.length > 0) {
-                        finalNum = availOld.shift();
-                        availMap[oldTrack] = availOld;
+                if (l.created_new || !l.registration_id) {
+                    availMap[newTrack] = availNew;
+                    tx.update(counterRef, { tracks_available: availMap, tracks_max: maxMap });
+                    tx.delete(regRef);
+                    return l.old_sfid || '';
+                } else {
+                    let useOldNum = false;
+                    const idxOld = availOld.indexOf(oldNum);
+                    if (idxOld !== -1) {
+                        availOld.splice(idxOld,1);
+                        useOldNum = true;
                     } else {
-                        const curMax = typeof maxMap[oldTrack] === 'number' ? maxMap[oldTrack] : (data[oldTrack] ?? INITIAL_TRACK_COUNTS[oldTrack] ?? 0);
-                        finalNum = curMax + 1;
-                        maxMap[oldTrack] = finalNum;
+                        useOldNum = false;
                     }
+                    availMap[oldTrack] = availOld;
+                    availMap[newTrack] = availNew;
+                    let finalNum = oldNum;
+                    if (!useOldNum) {
+                        if (availOld.length > 0) {
+                            finalNum = availOld.shift();
+                            availMap[oldTrack] = availOld;
+                        } else {
+                            const curMax = typeof maxMap[oldTrack] === 'number' ? maxMap[oldTrack] : (data[oldTrack] ?? INITIAL_TRACK_COUNTS[oldTrack] ?? 0);
+                            finalNum = curMax + 1;
+                            maxMap[oldTrack] = finalNum;
+                        }
+                    }
+                    const tCode = trackCodes[oldTrack];
+                    const sfid = `SF26-${tCode}-${String(finalNum).padStart(3,'0')}`;
+                    tx.update(counterRef, { tracks_max: maxMap, tracks_available: availMap });
+                    tx.update(regRef, { track: oldTrack, sfid, corrected_once: false, updated_at: serverTimestamp() });
+                    return sfid;
                 }
-                const tCode = trackCodes[oldTrack];
-                const sfid = `SF26-${tCode}-${String(finalNum).padStart(3,'0')}`;
-                tx.update(counterRef, { tracks_max: maxMap, tracks_available: availMap });
-                tx.update(regRef, { track: oldTrack, sfid, corrected_once: false, updated_at: serverTimestamp() });
-                return sfid;
             });
             try {
                 const ipCol = collection(db, 'artifacts', appId, 'public', 'data', 'ip_index');
@@ -1189,9 +1217,15 @@
                 const ipDocs = await getDocs(qIp);
                 const phDocs = await getDocs(qPh);
                 const emDocs = await getDocs(qEm);
-                for (const d of ipDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
-                for (const d of phDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
-                for (const d of emDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                if (l.created_new || !l.registration_id) {
+                    for (const d of ipDocs.docs) { await deleteDoc(d.ref); }
+                    for (const d of phDocs.docs) { await deleteDoc(d.ref); }
+                    for (const d of emDocs.docs) { await deleteDoc(d.ref); }
+                } else {
+                    for (const d of ipDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                    for (const d of phDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                    for (const d of emDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                }
             } catch(_) {}
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
                 type: 'revert',
@@ -1238,6 +1272,37 @@
             document.getElementById('error-modal').classList.remove('hidden');
         }
     };
+    async function revertToTotal(targetTotal) {
+        try {
+            const currentTotal = PREVIOUS_REGISTRY.length + cloudRegistry.length;
+            if (currentTotal <= targetTotal) return;
+            const need = currentTotal - targetTotal;
+            const candidates = [...cloudLogs]
+                .filter(l => l.type==='correction' && (l.created_new || !l.registration_id))
+                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))
+                .slice(0, need);
+            for (const l of candidates) {
+                await window.revertCorrection(l.id);
+            }
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Revert to total failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    }
+    async function revertBySfid(sfid) {
+        try {
+            const match = [...cloudLogs]
+                .filter(l => l.type==='correction' && (l.new_sfid === sfid || l.old_sfid === sfid))
+                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))[0];
+            if (!match) return;
+            await window.revertCorrection(match.id);
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Revert by SFID failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    }
     document.getElementById('correction-cancel').addEventListener('click', () => {
         document.getElementById('correction-modal').classList.add('hidden');
     });
@@ -1446,6 +1511,7 @@
                 }).catch(()=>{});
             } else {
                 const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
+                const newRef = doc(regsCol);
                 finalSFID = await runTransaction(db, async (tx) => {
                     const counterSnap = await tx.get(counterRef);
                     const data = counterSnap.exists() ? counterSnap.data() : {};
@@ -1463,7 +1529,6 @@
                         maxMap[newTrack] = seqNumNew;
                     }
                     const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
-                    const newRef = doc(regsCol);
                     tx.set(newRef, {
                         name: (newName || correctionSelected.name || ''),
                         track: newTrack,
@@ -1499,6 +1564,20 @@
                 if (emailKey) {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'email_index', emailKey), { sfid: finalSFID }).catch(()=>{});
                 }
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                    type: 'correction',
+                    registration_id: newRef.id,
+                    created_new: true,
+                    name: (newName || correctionSelected.name || ''),
+                    old_name: correctionSelected.name || '',
+                    new_name: (newName || correctionSelected.name || ''),
+                    old_sfid: oldSFID,
+                    old_track: oldTrack || '',
+                    new_sfid: finalSFID,
+                    new_track: newTrack,
+                    corrected_by: (auth.currentUser||{}).uid || 'admin',
+                    at: serverTimestamp()
+                }).catch(()=>{});
             }
             sessionState = {
                 name: (newName || correctionSelected.name || ''),

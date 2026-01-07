@@ -180,6 +180,43 @@
           Generate Registry Slip <i data-lucide="printer" class="w-4 h-4"></i>
         </button>
       </div>
+      
+      <div id="admin-view" class="hidden bg-[#13171f]/80 backdrop-blur-xl border border-white/5 rounded-[32px] p-8 text-left zoom-in">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-black tracking-tight">Admin Panel</h2>
+          <div class="flex items-center gap-3">
+            <select id="admin-filter-track" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm">
+              <option value="">All Tracks</option>
+              <option value="Forex Synthetic Indices">Forex Synthetic Indices</option>
+              <option value="Graphics Design">Graphics Design</option>
+              <option value="Stock Market Trading">Stock Market Trading</option>
+              <option value="Web Design & Development">Web Design & Development</option>
+              <option value="Forex Currency Pairs">Forex Currency Pairs</option>
+              <option value="Discord Design & Development">Discord Design & Development</option>
+              <option value="Photography & Editing">Photography & Editing</option>
+              <option value="Cybersecurity">Cybersecurity</option>
+            </select>
+            <input id="admin-search" type="text" placeholder="Search name, phone, email, SFID" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
+            <button id="admin-export" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase">Export CSV</button>
+          </div>
+        </div>
+        <div id="admin-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
+        <div class="overflow-auto border border-white/10 rounded-xl">
+          <table class="w-full text-sm">
+            <thead class="bg-white/5">
+              <tr>
+                <th class="p-2 text-left">SFID</th>
+                <th class="p-2 text-left">Name</th>
+                <th class="p-2 text-left">Track</th>
+                <th class="p-2 text-left">Phone</th>
+                <th class="p-2 text-left">Email</th>
+                <th class="p-2 text-left">Date</th>
+              </tr>
+            </thead>
+            <tbody id="admin-table" class="divide-y divide-white/5"></tbody>
+          </table>
+        </div>
+      </div>
     </main>
 
     <div id="print-slip" class="hidden fixed inset-0 bg-white text-black p-10 z-[999]">
@@ -356,6 +393,9 @@
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
             }
+            if (document.getElementById('admin-view') && !document.getElementById('admin-view').classList.contains('hidden')) {
+                renderAdmin();
+            }
         }, (err) => console.warn("Registry Sync Blocked", err));
     }
 
@@ -408,6 +448,20 @@
       const data = enc.encode(value);
       const hash = await crypto.subtle.digest('SHA-256', data);
       return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    async function deviceFingerprint() {
+      const ua = navigator.userAgent || '';
+      const pl = navigator.platform || '';
+      const lang = (navigator.languages || []).join(',');
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+      const sw = (screen && screen.width) ? screen.width : '';
+      const sh = (screen && screen.height) ? screen.height : '';
+      const sd = (screen && screen.colorDepth) ? screen.colorDepth : '';
+      const hc = navigator.hardwareConcurrency || '';
+      const dm = navigator.deviceMemory || '';
+      const off = new Date().getTimezoneOffset();
+      const payload = [ua, pl, lang, tz, sw, sh, sd, hc, dm, off].join('|');
+      return await sha256hex(payload);
     }
 
     // Real-time "Bounce" Check on Input Blur
@@ -489,12 +543,15 @@
 
         if (!isTestMode) {
             try {
+                const dHash = await deviceFingerprint();
                 const ip = await getPublicIp();
                 if (ip) {
                     const ipHash = await sha256hex(ip);
                     const ipRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+                    const ipDeviceRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', dHash);
                     const ipDoc = await getDoc(ipRef);
-                    if (ipDoc.exists()) {
+                    const ipDeviceDoc = await getDoc(ipDeviceRef);
+                    if (ipDoc.exists() || ipDeviceDoc.exists()) {
                         document.getElementById('error-message').innerText = 'This device/network is already registered.';
                         document.getElementById('error-modal').classList.remove('hidden');
                         return;
@@ -581,6 +638,7 @@
                 const ip = await getPublicIp();
                 if (!ip) throw new Error('IP_NOT_AVAILABLE');
                 const ipHash = await sha256hex(ip);
+                const deviceHash = await deviceFingerprint();
 
                 const normalizedPhone = sessionState.phone_normalized || '__EMPTY__';
                 const normalizedEmail = sessionState.email_normalized || '__EMPTY__';
@@ -588,6 +646,7 @@
                 const tCode = trackCodes[trackSelected];
 
                 const ipIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', ipHash);
+                const ipDeviceIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'ip_index', deviceHash);
                 const phoneIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'phone_index', normalizedPhone);
                 const emailIndexRef = doc(db, 'artifacts', appId, 'public', 'data', 'email_index', normalizedEmail);
                 
@@ -601,6 +660,8 @@
                     // 1. Security Checks
                     const ipSnap = await tx.get(ipIndexRef);
                     if (ipSnap.exists()) throw new Error('IP_ALREADY_REGISTERED');
+                    const ipDeviceSnap = await tx.get(ipDeviceIndexRef);
+                    if (ipDeviceSnap.exists()) throw new Error('IP_ALREADY_REGISTERED');
 
                     const phoneSnap = await tx.get(phoneIndexRef);
                     if (phoneSnap.exists() && phoneSnap.data().uid !== currentUser.uid) throw new Error('PHONE_ALREADY_REGISTERED');
@@ -635,6 +696,13 @@
                     tx.set(ipIndexRef, {
                         uid: currentUser.uid,
                         sfid: generatedSFID,
+                        ip: ipHash,
+                        created_at: serverTimestamp()
+                    });
+                    tx.set(ipDeviceIndexRef, {
+                        uid: currentUser.uid,
+                        sfid: generatedSFID,
+                        device: deviceHash,
                         created_at: serverTimestamp()
                     });
 
@@ -713,6 +781,73 @@
     }
 
     lucide.createIcons();
+
+    function formatDate(d) {
+        try {
+            if (!d) return '';
+            if (typeof d.toDate === 'function') return d.toDate().toLocaleString('en-GB');
+            return new Date(d).toLocaleString('en-GB');
+        } catch (_) { return ''; }
+    }
+    function showAdmin() {
+        document.getElementById('registration-view').classList.add('hidden');
+        document.getElementById('onboarding-view').classList.add('hidden');
+        document.getElementById('success-view').classList.add('hidden');
+        document.getElementById('admin-view').classList.remove('hidden');
+        renderAdmin();
+    }
+    function renderAdmin() {
+        const trackFilter = document.getElementById('admin-filter-track').value || '';
+        const query = (document.getElementById('admin-search').value || '').trim().toLowerCase();
+        const rows = cloudRegistry.filter(r => {
+            const byTrack = !trackFilter || r.track === trackFilter;
+            const blob = `${r.sfid||''} ${r.name||''} ${r.track||''} ${r.phone||''} ${r.email||''}`.toLowerCase();
+            const byQuery = !query || blob.includes(query);
+            return byTrack && byQuery;
+        });
+        const statsEl = document.getElementById('admin-stats');
+        const counts = {};
+        rows.forEach(r => { counts[r.track] = (counts[r.track]||0)+1; });
+        const statHtml = Object.keys(trackCodes).map(t => {
+            const c = counts[t]||0;
+            return `<div class="p-3 bg-white/5 border border-white/10 rounded-xl"><div class="text-[10px] uppercase font-black text-slate-400">${t}</div><div class="text-xl font-black">${c}</div></div>`;
+        }).join('');
+        statsEl.innerHTML = statHtml;
+        const tbody = document.getElementById('admin-table');
+        tbody.innerHTML = rows.map(r => {
+            return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${formatDate(r.created_at)||''}</td></tr>`;
+        }).join('');
+    }
+    function exportCSV() {
+        const trackFilter = document.getElementById('admin-filter-track').value || '';
+        const query = (document.getElementById('admin-search').value || '').trim().toLowerCase();
+        const rows = cloudRegistry.filter(r => {
+            const byTrack = !trackFilter || r.track === trackFilter;
+            const blob = `${r.sfid||''} ${r.name||''} ${r.track||''} ${r.phone||''} ${r.email||''}`.toLowerCase();
+            const byQuery = !query || blob.includes(query);
+            return byTrack && byQuery;
+        });
+        const header = ['SFID','Name','Track','Phone','Email','Date'];
+        const lines = [header.join(',')].concat(rows.map(r => {
+            const vals = [r.sfid||'', r.name||'', r.track||'', r.phone||'', r.email||'', formatDate(r.created_at)||''];
+            return vals.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',');
+        }));
+        const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'skillforge_registrations.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+    document.getElementById('admin-filter-track').addEventListener('change', renderAdmin);
+    document.getElementById('admin-search').addEventListener('input', renderAdmin);
+    document.getElementById('admin-export').addEventListener('click', exportCSV);
+    if (window.location.hash === '#admin') {
+        showAdmin();
+    }
   </script>
 </body>
 </html>

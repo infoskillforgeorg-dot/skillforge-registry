@@ -256,8 +256,8 @@
             </select>
             <input id="admin-search" type="text" placeholder="Search name, phone, email, SFID" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
             <button id="admin-export" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase">Export CSV</button>
-            <button id="admin-revert-5" class="bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert last 5</button>
-            <button id="admin-revert-5-track" class="bg-rose-600/80 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert 5 in Track</button>
+            <button id="admin-revert-latest" class="bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert Latest</button>
+            <button id="admin-revert-latest-track" class="bg-rose-600/80 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert Latest in Track</button>
           </div>
         </div>
         <div id="admin-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
@@ -1105,8 +1105,8 @@
         document.getElementById('admin-filter-track').value = card.dataset.track || '';
         renderAdmin();
     });
-    document.getElementById('admin-revert-5').addEventListener('click', () => revertLastCorrections(5));
-    document.getElementById('admin-revert-5-track').addEventListener('click', () => revertLastCorrectionsInTrack(5));
+    document.getElementById('admin-revert-latest').addEventListener('click', () => revertLatestCorrection());
+    document.getElementById('admin-revert-latest-track').addEventListener('click', () => revertLatestInTrack());
     if (window.location.hash === '#admin') {
         showAdmin();
     }
@@ -1210,32 +1210,28 @@
             document.getElementById('error-modal').classList.remove('hidden');
         }
     };
-    window.revertLastCorrections = async (count) => {
+    window.revertLatestCorrection = async () => {
         try {
-            const recent = [...cloudLogs]
+            const latest = [...cloudLogs]
                 .filter(l => l.type==='correction')
-                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))
-                .slice(0,count);
-            for (const l of recent) {
-                await window.revertCorrection(l.id);
-            }
+                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))[0];
+            if (!latest) return;
+            await window.revertCorrection(latest.id);
             renderAdmin();
         } catch (e) {
-            document.getElementById('error-message').innerText = 'Bulk revert failed. Please retry.';
+            document.getElementById('error-message').innerText = 'Revert failed. Please retry.';
             document.getElementById('error-modal').classList.remove('hidden');
         }
     };
-    window.revertLastCorrectionsInTrack = async (count) => {
+    window.revertLatestInTrack = async () => {
         try {
             const trackFilter = document.getElementById('admin-filter-track').value || '';
             if (!trackFilter) return;
-            const recent = [...cloudLogs]
+            const latest = [...cloudLogs]
                 .filter(l => l.type==='correction' && (l.old_track === trackFilter || l.new_track === trackFilter))
-                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))
-                .slice(0,count);
-            for (const l of recent) {
-                await window.revertCorrection(l.id);
-            }
+                .sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0)))[0];
+            if (!latest) return;
+            await window.revertCorrection(latest.id);
             renderAdmin();
         } catch (e) {
             document.getElementById('error-message').innerText = 'Track revert failed. Please retry.';

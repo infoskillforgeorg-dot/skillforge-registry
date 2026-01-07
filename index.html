@@ -131,7 +131,7 @@
         <div class="flex justify-between items-center mb-6">
           <h2 class="text-2xl font-black tracking-tight">Correction Mechanic</h2>
           <div class="flex items-center gap-3">
-            <input id="correction-search" type="text" placeholder="Search SFID, name, phone, email" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
+            <input id="correction-search" type="text" placeholder="Enter SFID (e.g., SF26-CYB-009)" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
             <select id="correction-new-track" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm">
               <option value="">Select new track</option>
               <option value="Forex Synthetic Indices">Forex Synthetic Indices</option>
@@ -146,20 +146,29 @@
             <button id="correction-apply" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase" disabled>Apply Correction</button>
           </div>
         </div>
-        <div class="overflow-auto border border-white/10 rounded-xl">
-          <table class="w-full text-sm">
-            <thead class="bg-white/5">
-              <tr>
-                <th class="p-2 text-left">SFID</th>
-                <th class="p-2 text-left">Name</th>
-                <th class="p-2 text-left">Track</th>
-                <th class="p-2 text-left">Phone</th>
-                <th class="p-2 text-left">Email</th>
-                <th class="p-2 text-left">Select</th>
-              </tr>
-            </thead>
-            <tbody id="correction-table" class="divide-y divide-white/5"></tbody>
-          </table>
+        <div id="correction-selected" class="border border-white/10 rounded-xl p-4 hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div class="text-[10px] uppercase font-black text-slate-400 mb-1">SFID</div>
+              <div id="corr-sfid" class="font-mono font-bold">—</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase font-black text-slate-400 mb-1">Track</div>
+              <div id="corr-track" class="font-bold">—</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase font-black text-slate-400 mb-1">Name</div>
+              <div id="corr-name" class="font-bold">—</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase font-black text-slate-400 mb-1">Phone</div>
+              <div id="corr-phone" class="font-bold">—</div>
+            </div>
+            <div>
+              <div class="text-[10px] uppercase font-black text-slate-400 mb-1">Email</div>
+              <div id="corr-email" class="font-bold">—</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -244,6 +253,7 @@
             </select>
             <input id="admin-search" type="text" placeholder="Search name, phone, email, SFID" class="bg-white/5 border border-white/10 rounded-xl p-2 text-sm w-64" />
             <button id="admin-export" class="bg-white text-black px-3 py-2 rounded-xl text-xs font-black uppercase">Export CSV</button>
+            <button id="admin-revert-5" class="bg-rose-600 text-white px-3 py-2 rounded-xl text-xs font-black uppercase">Revert last 5</button>
           </div>
         </div>
         <div id="admin-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></div>
@@ -263,6 +273,7 @@
             <tbody id="admin-table" class="divide-y divide-white/5"></tbody>
           </table>
         </div>
+        <div id="admin-logs" class="mt-6"></div>
         <div id="correction-modal" class="hidden fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
           <div class="bg-[#1a1f29] border border-blue-500/30 rounded-3xl p-8 max-w-sm w-full shadow-2xl">
             <h3 id="correction-title" class="text-xl font-bold mb-4">Correct Track</h3>
@@ -513,6 +524,7 @@
     let cloudRegistry = [];
     let sessionState = {};
     let correctionSelected = null;
+    let cloudLogs = [];
 
     const startApp = async () => {
         try {
@@ -581,6 +593,12 @@
                 renderAdmin();
             }
         }, (err) => console.warn("Registry Sync Blocked", err));
+        const lq = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+        onSnapshot(lq, (snap) => {
+            cloudLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            const adminVisible = document.getElementById('admin-view') && !document.getElementById('admin-view').classList.contains('hidden');
+            if (adminVisible) renderAdmin();
+        }, (err) => console.warn("Logs Sync Blocked", err));
     }
 
     startApp();
@@ -1021,14 +1039,24 @@
         rows.forEach(r => { counts[r.track] = (counts[r.track]||0)+1; });
         const statHtml = Object.keys(trackCodes).map(t => {
             const c = counts[t]||0;
-            return `<div class="p-3 bg-white/5 border border-white/10 rounded-xl"><div class="text-[10px] uppercase font-black text-slate-400">${t}</div><div class="text-xl font-black">${c}</div></div>`;
+            return `<div data-track="${t}" class="p-3 bg-white/5 border border-white/10 rounded-xl cursor-pointer hover:bg-white/10"><div class="text-[10px] uppercase font-black text-slate-400">${t}</div><div class="text-xl font-black">${c}</div></div>`;
         }).join('');
         statsEl.innerHTML = statHtml;
         const tbody = document.getElementById('admin-table');
         tbody.innerHTML = rows.map(r => {
-            const actionable = r.id ? `<button class="text-[10px] px-2 py-1 rounded bg-blue-600 text-white font-black uppercase" onclick="openCorrection('${r.id}')">Correct</button>` : `<button class="text-[10px] px-2 py-1 rounded bg-slate-700 text-white font-black uppercase cursor-not-allowed" disabled>Offline</button>`;
+            const actionable = r.id ? (r.corrected_once ? `<button class="text-[10px] px-2 py-1 rounded bg-slate-700 text-white font-black uppercase cursor-not-allowed" disabled>Corrected</button>` : `<button class="text-[10px] px-2 py-1 rounded bg-blue-600 text-white font-black uppercase" onclick="openCorrection('${r.id}')">Correct</button>`) : `<button class="text-[10px] px-2 py-1 rounded bg-slate-700 text-white font-black uppercase cursor-not-allowed" disabled>Offline</button>`;
             return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${formatDate(r.created_at)||''}</td><td class="p-2">${actionable}</td></tr>`;
         }).join('');
+        const logsEl = document.getElementById('admin-logs');
+        if (logsEl) {
+            const recent = [...cloudLogs].filter(l => l.type==='correction').sort((a,b)=>((b.at?.seconds||0)-(a.at?.seconds||0))).slice(0,20);
+            const logRows = recent.map(l => {
+                const when = formatDate(l.at);
+                const btn = `<button class="text-[10px] px-2 py-1 rounded bg-rose-600 text-white font-black uppercase" onclick="revertCorrection('${l.id||''}')">Revert</button>`;
+                return `<tr><td class="p-2">${when||''}</td><td class="p-2">${l.name||''}</td><td class="p-2 font-mono">${l.old_sfid||''}</td><td class="p-2">${l.old_track||''}</td><td class="p-2 font-mono">${l.new_sfid||''}</td><td class="p-2">${l.new_track||''}</td><td class="p-2">${btn}</td></tr>`;
+            }).join('');
+            logsEl.innerHTML = `<div class="border border-white/10 rounded-xl overflow-auto"><table class="w-full text-sm"><thead class="bg-white/5"><tr><th class="p-2">Date</th><th class="p-2">Name</th><th class="p-2">Old SFID</th><th class="p-2">Old Track</th><th class="p-2">New SFID</th><th class="p-2">New Track</th><th class="p-2">Action</th></tr></thead><tbody class="divide-y divide-white/5">${logRows}</tbody></table></div>`;
+        }
     }
     function exportCSV() {
         const trackFilter = document.getElementById('admin-filter-track').value || '';
@@ -1058,6 +1086,13 @@
     document.getElementById('admin-filter-track').addEventListener('change', renderAdmin);
     document.getElementById('admin-search').addEventListener('input', renderAdmin);
     document.getElementById('admin-export').addEventListener('click', exportCSV);
+    document.getElementById('admin-stats').addEventListener('click', (e) => {
+        const card = e.target.closest('[data-track]');
+        if (!card) return;
+        document.getElementById('admin-filter-track').value = card.dataset.track || '';
+        renderAdmin();
+    });
+    document.getElementById('admin-revert-5').addEventListener('click', () => revertLastCorrections(5));
     if (window.location.hash === '#admin') {
         showAdmin();
     }
@@ -1074,6 +1109,107 @@
         document.getElementById('correction-title').innerText = `Correct: ${rec.name||''} (${rec.sfid||''})`;
         document.getElementById('correction-modal').classList.remove('hidden');
     };
+    window.revertCorrection = async (logId) => {
+        try {
+            const logRef = doc(db, 'artifacts', appId, 'public', 'data', 'logs', logId);
+            const logSnap = await getDoc(logRef);
+            if (!logSnap.exists()) return;
+            const l = logSnap.data();
+            if (l.type !== 'correction') return;
+            const regRef = doc(db, 'artifacts', appId, 'public', 'data', 'registrations', l.registration_id);
+            const counterRef = doc(db, 'artifacts', appId, 'public', 'data', 'counters', 'tracks');
+            const finalSFID = await runTransaction(db, async (tx) => {
+                const regSnap = await tx.get(regRef);
+                if (!regSnap.exists()) throw new Error('NOT_FOUND');
+                const reg = regSnap.data();
+                const counterSnap = await tx.get(counterRef);
+                const data = counterSnap.exists() ? counterSnap.data() : {};
+                const maxMap = data.tracks_max || {};
+                const availMap = data.tracks_available || {};
+                const oldTrack = l.old_track || '';
+                const newTrack = l.new_track || '';
+                const oldNum = parseInt((String(l.old_sfid||'').split('-').pop()||'0'),10) || 0;
+                const newNum = parseInt((String(l.new_sfid||'').split('-').pop()||'0'),10) || 0;
+                const availOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
+                const availNew = Array.isArray(availMap[newTrack]) ? [...availMap[newTrack]] : [];
+                let useOldNum = false;
+                const idxOld = availOld.indexOf(oldNum);
+                if (idxOld !== -1) {
+                    availOld.splice(idxOld,1);
+                    useOldNum = true;
+                } else {
+                    useOldNum = false;
+                }
+                if (!availNew.includes(newNum)) {
+                    availNew.push(newNum);
+                    availNew.sort((a,b)=>a-b);
+                }
+                availMap[oldTrack] = availOld;
+                availMap[newTrack] = availNew;
+                let finalNum = oldNum;
+                if (!useOldNum) {
+                    if (availOld.length > 0) {
+                        finalNum = availOld.shift();
+                        availMap[oldTrack] = availOld;
+                    } else {
+                        const curMax = typeof maxMap[oldTrack] === 'number' ? maxMap[oldTrack] : (data[oldTrack] ?? INITIAL_TRACK_COUNTS[oldTrack] ?? 0);
+                        finalNum = curMax + 1;
+                        maxMap[oldTrack] = finalNum;
+                    }
+                }
+                const tCode = trackCodes[oldTrack];
+                const sfid = `SF26-${tCode}-${String(finalNum).padStart(3,'0')}`;
+                tx.update(counterRef, { tracks_max: maxMap, tracks_available: availMap });
+                tx.update(regRef, { track: oldTrack, sfid, corrected_once: false, updated_at: serverTimestamp() });
+                return sfid;
+            });
+            try {
+                const regSnap = await getDoc(regRef);
+                const rec = regSnap.exists() ? regSnap.data() : {};
+                const ipCol = collection(db, 'artifacts', appId, 'public', 'data', 'ip_index');
+                const phoneCol = collection(db, 'artifacts', appId, 'public', 'data', 'phone_index');
+                const emailCol = collection(db, 'artifacts', appId, 'public', 'data', 'email_index');
+                const qIp = query(ipCol, where('registration_id','==', l.registration_id));
+                const qPh = query(phoneCol, where('registration_id','==', l.registration_id));
+                const qEm = query(emailCol, where('registration_id','==', l.registration_id));
+                const ipDocs = await getDocs(qIp);
+                const phDocs = await getDocs(qPh);
+                const emDocs = await getDocs(qEm);
+                for (const d of ipDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                for (const d of phDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+                for (const d of emDocs.docs) { await updateDoc(d.ref, { sfid: finalSFID }); }
+            } catch(_) {}
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                type: 'revert',
+                registration_id: l.registration_id,
+                name: l.name || '',
+                old_sfid: l.new_sfid || '',
+                old_track: l.new_track || '',
+                new_sfid: finalSFID,
+                new_track: l.old_track || '',
+                reverted_by: (auth.currentUser||{}).uid || 'admin',
+                at: serverTimestamp()
+            }).catch(()=>{});
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Revert failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    };
+    window.revertLastCorrections = async (count) => {
+        try {
+            const logsCol = collection(db, 'artifacts', appId, 'public', 'data', 'logs');
+            const q = query(logsCol, where('type','==','correction'), orderBy('at','desc'), limit(count));
+            const snap = await getDocs(q);
+            for (const d of snap.docs) {
+                await window.revertCorrection(d.id);
+            }
+            renderAdmin();
+        } catch (e) {
+            document.getElementById('error-message').innerText = 'Bulk revert failed. Please retry.';
+            document.getElementById('error-modal').classList.remove('hidden');
+        }
+    };
     document.getElementById('correction-cancel').addEventListener('click', () => {
         document.getElementById('correction-modal').classList.add('hidden');
     });
@@ -1088,6 +1224,7 @@
             const recSnap = await getDoc(regRef);
             if (!recSnap.exists()) throw new Error('NOT_FOUND');
             const rec = recSnap.data();
+            if (rec.corrected_once) throw new Error('ALREADY_CORRECTED');
             const tCode = trackCodes[newTrack];
             const newSFID = await runTransaction(db, async (tx) => {
                 const counterSnap = await tx.get(counterRef);
@@ -1099,10 +1236,21 @@
                 }
                 const nextCount = currentCount + 1;
                 const generatedSFID = `SF26-${tCode}-${String(nextCount).padStart(3,'0')}`;
-                tx.update(regRef, { track: newTrack, sfid: generatedSFID, updated_at: serverTimestamp() });
+                tx.update(regRef, { track: newTrack, sfid: generatedSFID, corrected_once: true, updated_at: serverTimestamp() });
                 tx.set(counterRef, { [newTrack]: nextCount }, { merge: true });
                 return generatedSFID;
             });
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                type: 'correction',
+                registration_id: id,
+                name: rec.name || '',
+                old_sfid: oldSfid,
+                old_track: rec.track || '',
+                new_sfid: newSFID,
+                new_track: newTrack,
+                corrected_by: (auth.currentUser||{}).uid || 'admin',
+                at: serverTimestamp()
+            }).catch(()=>{});
             const phoneKey = rec.phone_normalized || '';
             const emailKey = rec.email_normalized || '';
             if (phoneKey) {
@@ -1131,34 +1279,38 @@
             document.getElementById('correction-modal').classList.add('hidden');
             renderAdmin();
         } catch (e) {
-            document.getElementById('error-message').innerText = 'Correction failed. Please retry.';
+            document.getElementById('error-message').innerText = e && e.message === 'ALREADY_CORRECTED' ? 'This record already has one correction.' : 'Correction failed. Please retry.';
             document.getElementById('error-modal').classList.remove('hidden');
         }
     });
 
     function renderCorrection() {
-        const queryStr = (document.getElementById('correction-search').value || '').trim().toLowerCase();
+        const queryStr = (document.getElementById('correction-search').value || '').trim().toUpperCase();
+        const sel = document.getElementById('correction-selected');
+        if (!queryStr || !/^SF26-[A-Z]{3}-\d{3}$/.test(queryStr)) {
+            sel.classList.add('hidden');
+            correctionSelected = null;
+            document.getElementById('correction-apply').disabled = true;
+            return;
+        }
         const merged = PREVIOUS_REGISTRY.concat(cloudRegistry);
-        const rows = merged.filter(r => {
-            const blob = `${r.sfid||''} ${r.name||''} ${r.track||''} ${r.phone||''} ${r.email||''}`.toLowerCase();
-            return !queryStr || blob.includes(queryStr);
-        });
-        const tbody = document.getElementById('correction-table');
-        tbody.innerHTML = rows.map(r => {
-            const selectable = `<button class="text-[10px] px-2 py-1 rounded ${r.id?'bg-blue-600':'bg-indigo-600'} text-white font-black uppercase" onclick="selectCorrection('${r.id||''}','${encodeURIComponent(r.sfid||'')}','${encodeURIComponent(r.name||'')}','${encodeURIComponent(r.track||'')}','${encodeURIComponent(r.phone||'')}','${encodeURIComponent(r.email||'')}')">Select</button>`;
-            return `<tr><td class="p-2 font-mono">${r.sfid||''}</td><td class="p-2">${r.name||''}</td><td class="p-2">${r.track||''}</td><td class="p-2">${r.phone||''}</td><td class="p-2">${r.email||''}</td><td class="p-2">${selectable}</td></tr>`;
-        }).join('');
+        const rec = merged.find(r => (r.sfid||'').toUpperCase() === queryStr);
+        if (!rec) {
+            sel.classList.add('hidden');
+            correctionSelected = null;
+            document.getElementById('correction-apply').disabled = true;
+            return;
+        }
+        correctionSelected = { id: rec.id||'', sfid: rec.sfid||'', name: rec.name||'', track: rec.track||'', phone: rec.phone||'', email: rec.email||'' };
+        document.getElementById('corr-sfid').innerText = rec.sfid||'';
+        document.getElementById('corr-track').innerText = rec.track||'';
+        document.getElementById('corr-name').innerText = rec.name||'';
+        document.getElementById('corr-phone').innerText = rec.phone||'';
+        document.getElementById('corr-email').innerText = rec.email||'';
+        sel.classList.remove('hidden');
+        document.getElementById('correction-apply').disabled = false;
     }
     document.getElementById('correction-search').addEventListener('input', renderCorrection);
-    window.selectCorrection = (id, sfidEnc, nameEnc, trackEnc, phoneEnc, emailEnc) => {
-        const sfid = decodeURIComponent(sfidEnc);
-        const name = decodeURIComponent(nameEnc);
-        const track = decodeURIComponent(trackEnc);
-        const phone = decodeURIComponent(phoneEnc);
-        const email = decodeURIComponent(emailEnc);
-        correctionSelected = { id, sfid, name, track, phone, email };
-        document.getElementById('correction-apply').disabled = false;
-    };
     document.getElementById('correction-apply').addEventListener('click', async () => {
         const newTrack = document.getElementById('correction-new-track').value;
         if (!correctionSelected || !newTrack) return;
@@ -1187,7 +1339,10 @@
                         maxMap[newTrack] = seqNumNew;
                     }
                     const generatedSFID = `SF26-${tCode}-${String(seqNumNew).padStart(3,'0')}`;
-                    tx.update(regRef, { track: newTrack, sfid: generatedSFID, updated_at: serverTimestamp() });
+                    const regSnap = await tx.get(regRef);
+                    const regData = regSnap.exists() ? regSnap.data() : {};
+                    if (regData.corrected_once) throw new Error('ALREADY_CORRECTED');
+                    tx.update(regRef, { track: newTrack, sfid: generatedSFID, corrected_once: true, updated_at: serverTimestamp() });
                     const freedNum = parseInt((oldSFID.split('-').pop()||'0'),10) || 0;
                     const poolOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
                     if (freedNum>0 && !poolOld.includes(freedNum)) {
@@ -1225,6 +1380,17 @@
                         await updateDoc(d.ref, { sfid: finalSFID });
                     }
                 } catch(_) {}
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'logs'), {
+                    type: 'correction',
+                    registration_id: correctionSelected.id,
+                    name: correctionSelected.name || '',
+                    old_sfid: oldSFID,
+                    old_track: oldTrack || '',
+                    new_sfid: finalSFID,
+                    new_track: newTrack,
+                    corrected_by: (auth.currentUser||{}).uid || 'admin',
+                    at: serverTimestamp()
+                }).catch(()=>{});
             } else {
                 const regsCol = collection(db, 'artifacts', appId, 'public', 'data', 'registrations');
                 finalSFID = await runTransaction(db, async (tx) => {
@@ -1256,7 +1422,8 @@
                         sfid: generatedSFID,
                         timestamp: new Date().toISOString(),
                         created_by: (auth.currentUser||{}).uid || 'admin',
-                        created_at: serverTimestamp()
+                        created_at: serverTimestamp(),
+                        corrected_once: true
                     });
                     const freedNum = parseInt((oldSFID.split('-').pop()||'0'),10) || 0;
                     const poolOld = Array.isArray(availMap[oldTrack]) ? [...availMap[oldTrack]] : [];
@@ -1299,8 +1466,8 @@
                 if (wl) window.open(wl,'_blank');
             } catch(_) {}
             showSuccess();
-        } catch (e) {
-            document.getElementById('error-message').innerText = 'Correction failed. Please retry.';
+            } catch (e) {
+            document.getElementById('error-message').innerText = e && e.message === 'ALREADY_CORRECTED' ? 'This record already has one correction.' : 'Correction failed. Please retry.';
             document.getElementById('error-modal').classList.remove('hidden');
         }
     });
